@@ -29,10 +29,7 @@ export default function DashboardPage() {
         let reportsQuery: Query<DocumentData>;
 
         if (isAdminUser(user)) {
-          // Admin: Collection group query is failing. Return empty list to prevent crash.
-          setAllReports([]);
-          setIsLoading(false);
-          return;
+          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
           // Regular user: Fetch only their own reports.
           reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
