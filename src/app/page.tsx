@@ -24,7 +24,7 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   const [email, setEmail] = useState('admin@example.gov');
-  const [password, setPassword] = useState('password');
+  const [password, setPassword] = useState('Innovation123');
 
   useEffect(() => {
     if (!isUserLoading && user) {
