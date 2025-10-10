@@ -28,13 +28,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
-import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useUser, addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import {
   collection,
   query,
   where,
   getCountFromServer,
   serverTimestamp,
+  doc,
 } from 'firebase/firestore';
 
 const formSchema = z.object({
@@ -109,11 +110,14 @@ export default function NewReportPage() {
     
     // Private report for the user
     const userReportRef = collection(firestore, 'users', user.uid, 'testReports');
-    addDocumentNonBlocking(userReportRef, reportData);
+    const privateDoc = await addDocumentNonBlocking(userReportRef, reportData);
 
-    // Public verifiable report
-    const publicReportRef = collection(firestore, 'test_reports_public');
-    addDocumentNonBlocking(publicReportRef, reportData);
+    // Public verifiable report using the UIN as the document ID
+    if (privateDoc) {
+      const publicReportRef = doc(firestore, 'test_reports_public', privateDoc.id);
+      setDocumentNonBlocking(publicReportRef, reportData, { merge: true });
+    }
+
 
     toast({
       title: 'Report Submitted',

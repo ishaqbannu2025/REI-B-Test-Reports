@@ -1,5 +1,5 @@
 'use client';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
@@ -7,13 +7,16 @@ import { Logo } from '@/components/logo';
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
+import { Timestamp } from 'firebase/firestore';
 
-export default function ReportDetailPage({ params }: { params: { id: string } }) {
+export default function ReportDetailPage() {
+  const params = useParams();
+  const { id } = params;
   const { firestore } = useFirebase();
 
   const reportRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, 'test_reports_public', params.id) : null),
-    [firestore, params.id]
+    () => (firestore && typeof id === 'string' ? doc(firestore, 'test_reports_public', id) : null),
+    [firestore, id]
   );
   const { data: report, isLoading } = useDoc<TestReport>(reportRef);
 
@@ -27,6 +30,13 @@ export default function ReportDetailPage({ params }: { params: { id: string } })
   
   const handlePrint = () => {
     window.print();
+  }
+
+  const getReportDate = (date: Date | Timestamp) => {
+    if(date instanceof Timestamp) {
+      return date.toDate().toLocaleDateString();
+    }
+    return new Date(date).toLocaleDateString();
   }
 
   return (
@@ -76,7 +86,7 @@ export default function ReportDetailPage({ params }: { params: { id: string } })
             </div>
              <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Entry Date</span>
-              <span className="text-base">{new Date(report.entryDate).toLocaleDateString()}</span>
+              <span className="text-base">{getReportDate(report.entryDate)}</span>
             </div>
 
             <div className="md:col-span-2 my-2 border-t"></div>
