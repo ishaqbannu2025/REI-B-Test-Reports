@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { Timestamp } from "firebase/firestore";
 
 export type TestReportCategory = "Domestic" | "Commercial" | "Industrial";
 
@@ -15,7 +16,7 @@ export type TestReport = {
   challan: string;
   electricalContractorName: string;
   remarks: string;
-  entryDate: Date;
+  entryDate: Date | Timestamp;
   enteredBy: string;
 };
 

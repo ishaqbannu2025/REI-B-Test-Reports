@@ -24,12 +24,13 @@ import {
   Settings,
   LogOut,
 } from 'lucide-react';
-
+import { getAuth } from 'firebase/auth';
 import { Logo } from '@/components/logo';
 import { UserNav } from '@/components/user-nav';
 import type { NavItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { users } from '@/lib/data';
+import { useUser } from '@/firebase';
+
 
 const navItems: NavItem[] = [
   { href: '/dashboard', title: 'Dashboard', icon: LayoutDashboard },
@@ -41,7 +42,13 @@ const navItems: NavItem[] = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const currentUser = users[0]; // Assuming admin is logged in for demo
+  const { user } = useUser();
+  // Mock role for demo, replace with actual role from user object
+  const userRole = user ? 'Admin' : 'Data Entry User';
+
+  const handleLogout = () => {
+    getAuth().signOut();
+  };
 
   return (
     <SidebarProvider>
@@ -59,7 +66,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarContent className="p-2">
             <SidebarMenu>
               {navItems.map((item) => {
-                if (item.adminOnly && currentUser.role !== 'Admin') {
+                if (item.adminOnly && userRole !== 'Admin') {
                   return null;
                 }
                 const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
@@ -91,7 +98,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Logout">
+                <SidebarMenuButton onClick={handleLogout} asChild tooltip="Logout">
                   <Link href="/">
                     <LogOut />
                     <span>Logout</span>

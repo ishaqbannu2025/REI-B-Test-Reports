@@ -37,7 +37,7 @@ export function RecentReports({ reports }: RecentReportsProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {reports.map((report) => (
+            {reports.slice(0, 5).map((report) => (
               <TableRow key={report.id}>
                 <TableCell>
                   <div className="font-medium">{report.applicantName}</div>

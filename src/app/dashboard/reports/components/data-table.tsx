@@ -1,3 +1,4 @@
+// src/app/dashboard/reports/components/data-table.tsx
 "use client"
 
 import * as React from "react"
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { FileDown, Filter } from "lucide-react"
+import { FileDown } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -38,14 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { testReports } from "@/lib/data"
+import { TestReport } from "@/lib/types"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
 }
-
-const uniqueDistricts = Array.from(new Set(testReports.map(r => r.district)));
 
 export function DataTable<TData, TValue>({
   columns,
@@ -54,6 +53,10 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+
+  const uniqueDistricts = React.useMemo(() => {
+    return Array.from(new Set((data as TestReport[]).map(r => r.district)));
+  }, [data]);
 
   const table = useReactTable({
     data,

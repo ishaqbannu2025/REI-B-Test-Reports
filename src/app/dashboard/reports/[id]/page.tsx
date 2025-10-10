@@ -1,13 +1,25 @@
-"use client"
+'use client';
 import { notFound } from 'next/navigation';
-import { testReports } from '@/lib/data';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
 import { Logo } from '@/components/logo';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import type { TestReport } from '@/lib/types';
 
 export default function ReportDetailPage({ params }: { params: { id: string } }) {
-  const report = testReports.find((r) => r.id === params.id);
+  const { firestore } = useFirebase();
+
+  const reportRef = useMemoFirebase(
+    () => (firestore ? doc(firestore, 'test_reports_public', params.id) : null),
+    [firestore, params.id]
+  );
+  const { data: report, isLoading } = useDoc<TestReport>(reportRef);
+
+  if (isLoading) {
+    return <div>Loading report...</div>;
+  }
 
   if (!report) {
     notFound();
@@ -64,7 +76,7 @@ export default function ReportDetailPage({ params }: { params: { id: string } })
             </div>
              <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Entry Date</span>
-              <span className="text-base">{report.entryDate.toLocaleDateString()}</span>
+              <span className="text-base">{new Date(report.entryDate).toLocaleDateString()}</span>
             </div>
 
             <div className="md:col-span-2 my-2 border-t"></div>

@@ -1,11 +1,27 @@
+'use client';
+
 import { StatCard } from './components/stat-card';
 import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
-import { testReports } from '@/lib/data';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
+import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy, limit } from 'firebase/firestore';
 
 export default function DashboardPage() {
+  const { firestore } = useFirebase();
+  const { user } = useUser();
+
+  const allReportsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'test_reports_public'), orderBy('entryDate', 'desc'));
+  }, [firestore]);
+  const { data: testReports, isLoading } = useCollection<TestReport>(allReportsQuery);
+  
+  if (isLoading || !testReports) {
+    return <div>Loading Dashboard...</div>
+  }
+
   const totalReports = testReports.length;
   const totalFees = testReports.reduce((acc, report) => acc + report.governmentFee, 0);
   const domesticReports = testReports.filter(r => r.category === 'Domestic').length;
@@ -48,7 +64,7 @@ export default function DashboardPage() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <CategoryChart data={chartData} />
-        <RecentReports reports={testReports.slice(0, 5) as TestReport[]} />
+        <RecentReports reports={testReports as TestReport[]} />
       </div>
     </div>
   );

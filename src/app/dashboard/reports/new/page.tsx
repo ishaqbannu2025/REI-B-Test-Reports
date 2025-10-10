@@ -1,9 +1,9 @@
-"use client"
+'use client';
 
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { Button } from "@/components/ui/button"
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
@@ -12,88 +12,115 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+} from '@/components/ui/form';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { useToast } from "@/hooks/use-toast"
-import { testReports } from "@/lib/data"
-import { useState } from "react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Terminal } from "lucide-react"
-
+} from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Terminal } from 'lucide-react';
+import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import {
+  collection,
+  query,
+  where,
+  getCountFromServer,
+  serverTimestamp,
+} from 'firebase/firestore';
 
 const formSchema = z.object({
-  uin: z.string().min(1, "UIN is required."),
-  applicantName: z.string().min(1, "Applicant name is required."),
-  shortAddress: z.string().min(1, "Address is required."),
-  district: z.string().min(1, "District is required."),
-  category: z.enum(["Domestic", "Commercial", "Industrial"]),
-  sanctionedLoad: z.string().min(1, "Sanctioned load is required."),
-  proposedTransformer: z.string().min(1, "Transformer info is required."),
-  governmentFee: z.coerce.number().min(0, "Fee must be a positive number."),
-  challan: z.string().min(1, "Challan number/date is required."),
-  electricalContractorName: z.string().min(1, "Contractor name is required."),
+  uin: z.string().min(1, 'UIN is required.'),
+  applicantName: z.string().min(1, 'Applicant name is required.'),
+  shortAddress: z.string().min(1, 'Address is required.'),
+  district: z.string().min(1, 'District is required.'),
+  category: z.enum(['Domestic', 'Commercial', 'Industrial']),
+  sanctionedLoad: z.string().min(1, 'Sanctioned load is required.'),
+  proposedTransformer: z.string().min(1, 'Transformer info is required.'),
+  governmentFee: z.coerce.number().min(0, 'Fee must be a positive number.'),
+  challan: z.string().min(1, 'Challan number/date is required.'),
+  electricalContractorName: z.string().min(1, 'Contractor name is required.'),
   remarks: z.string().optional(),
-})
+});
 
 export default function NewReportPage() {
-    const { toast } = useToast()
-    const [uinExists, setUinExists] = useState(false);
+  const { toast } = useToast();
+  const { firestore } = useFirebase();
+  const { user } = useUser();
+  const [uinExists, setUinExists] = useState(false);
 
-    const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            uin: "",
-            applicantName: "",
-            shortAddress: "",
-            district: "Bannu",
-            sanctionedLoad: "",
-            proposedTransformer: "No",
-            governmentFee: 0,
-            challan: "",
-            electricalContractorName: "",
-            remarks: "",
-        },
-    })
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      uin: '',
+      applicantName: '',
+      shortAddress: '',
+      district: 'Bannu',
+      category: 'Domestic',
+      sanctionedLoad: '',
+      proposedTransformer: 'No',
+      governmentFee: 0,
+      challan: '',
+      electricalContractorName: '',
+      remarks: '',
+    },
+  });
 
-    function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
-        const uin = e.target.value;
-        form.setValue("uin", uin);
-        const exists = testReports.some(report => report.uin.toLowerCase() === uin.toLowerCase());
-        setUinExists(exists);
+  async function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const uin = e.target.value;
+    form.setValue('uin', uin);
+    if (firestore && uin) {
+      const reportsRef = collection(firestore, 'test_reports_public');
+      const q = query(reportsRef, where('uin', '==', uin));
+      const snapshot = await getCountFromServer(q);
+      setUinExists(snapshot.data().count > 0);
+    } else {
+      setUinExists(false);
+    }
+  }
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (uinExists) {
+      toast({
+        variant: 'destructive',
+        title: 'Duplicate UIN',
+        description: 'A report with this UIN already exists. Please enter a unique UIN.',
+      });
+      return;
+    }
+    if (!firestore || !user) {
+        toast({ variant: "destructive", title: "Error", description: "You must be logged in to create a report." });
+        return;
     }
 
-    function onSubmit(values: z.infer<typeof formSchema>) {
-        if(uinExists) {
-            toast({
-                variant: "destructive",
-                title: "Duplicate UIN",
-                description: "A report with this UIN already exists. Please enter a unique UIN.",
-            })
-            return;
-        }
-        console.log(values)
-        toast({
-            title: "Report Submitted",
-            description: `Report with UIN ${values.uin} has been successfully created.`,
-        })
-        form.reset();
-        setUinExists(false);
+    const reportData = {
+        ...values,
+        entryDate: serverTimestamp(),
+        enteredBy: user.uid,
+    };
+    
+    // Private report for the user
+    const userReportRef = collection(firestore, 'users', user.uid, 'testReports');
+    addDocumentNonBlocking(userReportRef, reportData);
+
+    // Public verifiable report
+    const publicReportRef = collection(firestore, 'test_reports_public');
+    addDocumentNonBlocking(publicReportRef, reportData);
+
+    toast({
+      title: 'Report Submitted',
+      description: `Report with UIN ${values.uin} has been successfully created.`,
+    });
+    form.reset();
+    setUinExists(false);
   }
 
   return (
@@ -106,188 +133,193 @@ export default function NewReportPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <div className="grid md:grid-cols-2 gap-8">
-                <FormField
+              <FormField
                 control={form.control}
                 name="uin"
                 render={({ field }) => (
-                    <FormItem>
+                  <FormItem>
                     <FormLabel>Unique Identification Number (UIN)</FormLabel>
                     <FormControl>
-                        <Input placeholder="e.g., REI-BNU-2025-0012" {...field} onChange={handleUinChange} />
+                      <Input
+                        placeholder="e.g., REI-BNU-2025-0012"
+                        {...field}
+                        onChange={handleUinChange}
+                      />
                     </FormControl>
-                    <FormDescription>
-                        Manually enter the UIN for this report.
-                    </FormDescription>
+                    <FormDescription>Manually enter the UIN for this report.</FormDescription>
                     <FormMessage />
                     {uinExists && (
-                         <Alert variant="destructive">
-                            <Terminal className="h-4 w-4" />
-                            <AlertTitle>Duplicate UIN Warning</AlertTitle>
-                            <AlertDescription>
-                                A report with this UIN already exists.
-                            </AlertDescription>
-                        </Alert>
+                      <Alert variant="destructive">
+                        <Terminal className="h-4 w-4" />
+                        <AlertTitle>Duplicate UIN Warning</AlertTitle>
+                        <AlertDescription>A report with this UIN already exists.</AlertDescription>
+                      </Alert>
                     )}
-                    </FormItem>
+                  </FormItem>
                 )}
-                />
-                 <FormField
+              />
+              <FormField
                 control={form.control}
                 name="applicantName"
                 render={({ field }) => (
-                    <FormItem>
+                  <FormItem>
                     <FormLabel>Applicant Name</FormLabel>
                     <FormControl>
-                        <Input placeholder="John Doe" {...field} />
+                      <Input placeholder="John Doe" {...field} />
                     </FormControl>
                     <FormMessage />
-                    </FormItem>
+                  </FormItem>
                 )}
-                />
+              />
             </div>
-            
-             <div className="grid md:grid-cols-2 gap-8">
-                <FormField
-                    control={form.control}
-                    name="shortAddress"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Short Address</FormLabel>
-                        <FormControl>
-                            <Input placeholder="House 123, Street 4, City" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="district"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>District</FormLabel>
-                        <FormControl>
-                            <Input placeholder="Bannu" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
-            </div>
-            
-            <div className="grid md:grid-cols-3 gap-8">
-                 <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Category</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                            <SelectItem value="Domestic">Domestic</SelectItem>
-                            <SelectItem value="Commercial">Commercial</SelectItem>
-                            <SelectItem value="Industrial">Industrial</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                <FormField
-                    control={form.control}
-                    name="sanctionedLoad"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Sanctioned Load (in kW or kVA)</FormLabel>
-                        <FormControl>
-                            <Input placeholder="e.g., 5 kW" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="proposedTransformer"
-                    render={({ field }) => (
-                        <FormItem className="space-y-3">
-                        <FormLabel>Proposed Transformer</FormLabel>
-                        <FormControl>
-                            <RadioGroup
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                            className="flex items-center space-x-4"
-                            >
-                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                <FormControl>
-                                <RadioGroupItem value="No" />
-                                </FormControl>
-                                <FormLabel className="font-normal">No</FormLabel>
-                            </FormItem>
-                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                <FormControl>
-                                <RadioGroupItem value="Yes" />
-                                </FormControl>
-                                <FormLabel className="font-normal">Yes</FormLabel>
-                            </FormItem>
-                             <FormItem className="flex items-center space-x-2 space-y-0">
-                                <FormControl>
-                                <Input className="w-auto" placeholder="kVA Value" onChange={(e) => field.onChange(e.target.value)} />
-                                </FormControl>
-                            </FormItem>
-                            </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <FormField
+                control={form.control}
+                name="shortAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Short Address</FormLabel>
+                    <FormControl>
+                      <Input placeholder="House 123, Street 4, City" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="district"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>District</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Bannu" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <div className="grid md:grid-cols-3 gap-8">
-                 <FormField
-                    control={form.control}
-                    name="governmentFee"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Government Fee (Rs)</FormLabel>
-                        <FormControl>
-                            <Input type="number" placeholder="1500" {...field} />
-                        </FormControl>
-                        <FormMessage />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Domestic">Domestic</SelectItem>
+                        <SelectItem value="Commercial">Commercial</SelectItem>
+                        <SelectItem value="Industrial">Industrial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="sanctionedLoad"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sanctioned Load (in kW or kVA)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., 5 kW" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="proposedTransformer"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>Proposed Transformer</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="flex items-center space-x-4"
+                      >
+                        <FormItem className="flex items-center space-x-2 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="No" />
+                          </FormControl>
+                          <FormLabel className="font-normal">No</FormLabel>
                         </FormItem>
-                    )}
-                />
-                 <FormField
-                    control={form.control}
-                    name="challan"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Challan No. / Date</FormLabel>
-                        <FormControl>
-                            <Input placeholder="12345 / 2025-01-10" {...field} />
-                        </FormControl>
-                        <FormMessage />
+                        <FormItem className="flex items-center space-x-2 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="Yes" />
+                          </FormControl>
+                          <FormLabel className="font-normal">Yes</FormLabel>
                         </FormItem>
-                    )}
-                />
-                 <FormField
-                    control={form.control}
-                    name="electricalContractorName"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Electrical Contractor Name</FormLabel>
-                        <FormControl>
-                            <Input placeholder="Reliable Electrics" {...field} />
-                        </FormControl>
-                        <FormMessage />
+                        <FormItem className="flex items-center space-x-2 space-y-0">
+                          <FormControl>
+                            <Input
+                              className="w-auto"
+                              placeholder="kVA Value"
+                              value={field.value !== 'Yes' && field.value !== 'No' ? field.value : ''}
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          </FormControl>
                         </FormItem>
-                    )}
-                />
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8">
+              <FormField
+                control={form.control}
+                name="governmentFee"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Government Fee (Rs)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="1500" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="challan"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Challan No. / Date</FormLabel>
+                    <FormControl>
+                      <Input placeholder="12345 / 2025-01-10" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="electricalContractorName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Electrical Contractor Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Reliable Electrics" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <FormField
@@ -309,14 +341,14 @@ export default function NewReportPage() {
             />
 
             <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => form.reset()}>
-                    Clear
-                </Button>
-                <Button type="submit">Submit Report</Button>
+              <Button type="button" variant="outline" onClick={() => form.reset()}>
+                Clear
+              </Button>
+              <Button type="submit">Submit Report</Button>
             </div>
           </form>
         </Form>
       </CardContent>
     </Card>
-  )
+  );
 }
