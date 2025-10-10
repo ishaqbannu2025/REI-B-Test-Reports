@@ -134,7 +134,8 @@
         },
         "role": {
           "type": "string",
-          "description": "Role of the user (Admin, Data Entry User)."
+          "description": "Role of the user (Admin, Data Entry User).",
+          "enum": ["Admin", "Data Entry User"]
         }
       },
       "required": [
@@ -176,7 +177,7 @@
           "schema": {
             "$ref": "#/backend/entities/TestReport"
           },
-          "description": "Stores test reports created by the specified user. This is a collection group.",
+          "description": "Stores test reports created by the specified user.",
           "params": [
             {
               "name": "userId",
