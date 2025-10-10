@@ -1,0 +1,130 @@
+"use client"
+import { notFound } from 'next/navigation';
+import { testReports } from '@/lib/data';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Printer } from 'lucide-react';
+import { Logo } from '@/components/logo';
+
+export default function ReportDetailPage({ params }: { params: { id: string } }) {
+  const report = testReports.find((r) => r.id === params.id);
+
+  if (!report) {
+    notFound();
+  }
+  
+  const handlePrint = () => {
+    window.print();
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+        <style>{`
+            @media print {
+                body * {
+                    visibility: hidden;
+                }
+                #print-section, #print-section * {
+                    visibility: visible;
+                }
+                #print-section {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                }
+                .no-print {
+                  display: none;
+                }
+            }
+        `}</style>
+      <div className="flex justify-end mb-4 no-print">
+        <Button onClick={handlePrint}>
+            <Printer className="mr-2 h-4 w-4"/>
+            Print Report
+        </Button>
+      </div>
+      <Card id="print-section" className="p-2 sm:p-6">
+        <CardHeader className="text-center border-b pb-6">
+            <div className="flex items-center justify-center gap-4">
+                <Logo className="h-20 w-20" />
+                <div>
+                    <h1 className="text-2xl font-bold text-primary">Regional Electric Inspectorate, Bannu</h1>
+                    <p className="text-muted-foreground">Energy & Power Department, Government of Khyber Pakhtunkhwa</p>
+                    <h2 className="text-xl font-semibold mt-2">Electrical Test Report</h2>
+                </div>
+            </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+            
+            <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Unique Identification Number (UIN)</span>
+              <span className="font-mono text-base">{report.uin}</span>
+            </div>
+             <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Entry Date</span>
+              <span className="text-base">{report.entryDate.toLocaleDateString()}</span>
+            </div>
+
+            <div className="md:col-span-2 my-2 border-t"></div>
+
+            <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Applicant Name</span>
+              <span className="text-base">{report.applicantName}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Short Address</span>
+              <span className="text-base">{report.shortAddress}, {report.district}</span>
+            </div>
+            
+            <div className="md:col-span-2 my-2 border-t"></div>
+            
+            <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Category</span>
+              <span className="text-base">{report.category}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Sanctioned Load</span>
+              <span className="text-base">{report.sanctionedLoad}</span>
+            </div>
+             <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Proposed Transformer</span>
+              <span className="text-base">{report.proposedTransformer}</span>
+            </div>
+
+            <div className="md:col-span-2 my-2 border-t"></div>
+
+             <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Government Fee (Rs)</span>
+              <span className="text-base">Rs {report.governmentFee.toLocaleString()}</span>
+            </div>
+             <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Challan No. / Date</span>
+              <span className="text-base">{report.challan}</span>
+            </div>
+             <div className="flex flex-col">
+              <span className="font-semibold text-muted-foreground">Electrical Contractor</span>
+              <span className="text-base">{report.electricalContractorName}</span>
+            </div>
+
+            <div className="md:col-span-2 my-2 border-t"></div>
+
+            <div className="flex flex-col md:col-span-2">
+              <span className="font-semibold text-muted-foreground">Remarks / Comments</span>
+              <p className="text-base mt-1">{report.remarks || 'N/A'}</p>
+            </div>
+          </div>
+
+          <div className="mt-24 pt-6 border-t flex justify-end">
+              <div className="w-1/3 text-center">
+                  <div className="border-t-2 border-dotted border-foreground w-full mb-2"></div>
+                  <p className="font-semibold">Electric Inspector</p>
+                  <p className="text-xs text-muted-foreground">Signature & Stamp</p>
+              </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
