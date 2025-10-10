@@ -39,15 +39,18 @@ export default function LoginPage() {
     
     signInWithEmailAndPassword(auth, email, password)
       .catch((error) => {
-        if (error.code === 'auth/user-not-found') {
-          // If user not found, create a new user
-          return createUserWithEmailAndPassword(auth, email, password);
-        } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-          toast({
-            variant: "destructive",
-            title: "Login Failed",
-            description: "Invalid credentials. Please check your email and password.",
-          });
+        // If login fails for any reason (user not found, wrong password),
+        // try creating the user. This ensures the default admin can always be created.
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+          return createUserWithEmailAndPassword(auth, email, password)
+            .catch((createError) => {
+              // Handle cases where even user creation fails (e.g. weak password)
+              toast({
+                  variant: "destructive",
+                  title: "Login Error",
+                  description: createError.message,
+              });
+            });
         } else {
             toast({
                 variant: "destructive",
