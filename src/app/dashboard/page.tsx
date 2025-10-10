@@ -6,16 +6,18 @@ import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { collection, query, orderBy, limit, collectionGroup } from 'firebase/firestore';
 
 export default function DashboardPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
 
+  // Query all test reports across all users for the dashboard
   const allReportsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'test_reports_public'), orderBy('entryDate', 'desc'));
+    return query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
   }, [firestore]);
+
   const { data: testReports, isLoading } = useCollection<TestReport>(allReportsQuery);
   
   if (isLoading || !testReports) {

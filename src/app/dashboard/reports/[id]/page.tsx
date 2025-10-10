@@ -1,24 +1,52 @@
 'use client';
-import { notFound, useParams } from 'next/navigation';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Printer } from 'lucide-react';
+import { Printer, ArrowLeft } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { doc, getDoc, collectionGroup, query, where, getDocs } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 
 export default function ReportDetailPage() {
   const params = useParams();
-  const { id } = params;
+  const router = useRouter();
+  const { id } = params; // This ID is the UIN
   const { firestore } = useFirebase();
+  const [report, setReport] = useState<TestReport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const reportRef = useMemoFirebase(
-    () => (firestore && typeof id === 'string' ? doc(firestore, 'test_reports_public', id) : null),
-    [firestore, id]
-  );
-  const { data: report, isLoading } = useDoc<TestReport>(reportRef);
+  useEffect(() => {
+    if (!firestore || typeof id !== 'string') return;
+
+    const findReport = async () => {
+      setIsLoading(true);
+      // Since we don't know the user, we have to do a collection group query.
+      // This is less efficient but necessary when the URL doesn't contain the user ID.
+      const reportsRef = collectionGroup(firestore, 'testReports');
+      const q = query(reportsRef, where('uin', '==', id));
+      
+      try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          setReport({...(doc.data() as TestReport), id: doc.id });
+        } else {
+          setReport(null);
+        }
+      } catch (e) {
+        console.error("Error fetching report: ", e);
+        setReport(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    findReport();
+  }, [firestore, id]);
+
 
   if (isLoading) {
     return <div>Loading report...</div>;
@@ -43,6 +71,9 @@ export default function ReportDetailPage() {
     <div className="max-w-4xl mx-auto">
         <style>{`
             @media print {
+                body, .print-container {
+                  background: white;
+                }
                 body * {
                     visibility: hidden;
                 }
@@ -54,19 +85,25 @@ export default function ReportDetailPage() {
                     left: 0;
                     top: 0;
                     width: 100%;
+                    margin: 0;
+                    padding: 0;
                 }
                 .no-print {
                   display: none;
                 }
             }
         `}</style>
-      <div className="flex justify-end mb-4 no-print">
+      <div className="flex justify-between items-center mb-4 no-print">
+        <Button variant="outline" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2 h-4 w-4"/>
+            Back to Reports
+        </Button>
         <Button onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4"/>
             Print Report
         </Button>
       </div>
-      <Card id="print-section" className="p-2 sm:p-6">
+      <Card id="print-section" className="p-2 sm:p-6 print-container">
         <CardHeader className="text-center border-b pb-6">
             <div className="flex items-center justify-center gap-4">
                 <Logo className="h-20 w-20" />

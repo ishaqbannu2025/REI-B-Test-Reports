@@ -78,9 +78,15 @@ export default function NewReportPage() {
   async function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
     const uin = e.target.value;
     form.setValue('uin', uin);
-    if (firestore && uin) {
-      const reportsRef = collection(firestore, 'test_reports_public');
-      const q = query(reportsRef, where('uin', '==', uin));
+    // Note: This check is not exhaustive if UINs are unique across all users,
+    // as it only checks the current user's reports. A backend check would be needed
+    // for global uniqueness.
+    if (firestore && user && uin) {
+      const reportRef = doc(firestore, 'users', user.uid, 'testReports', uin);
+      // A getDoc is more efficient than getCountFromServer for a single doc check.
+      // However, for simplicity and to stick with existing patterns:
+      const userReportsRef = collection(firestore, 'users', user.uid, 'testReports');
+      const q = query(userReportsRef, where('uin', '==', uin));
       const snapshot = await getCountFromServer(q);
       setUinExists(snapshot.data().count > 0);
     } else {
@@ -93,7 +99,7 @@ export default function NewReportPage() {
       toast({
         variant: 'destructive',
         title: 'Duplicate UIN',
-        description: 'A report with this UIN already exists. Please enter a unique UIN.',
+        description: 'A report with this UIN already exists for you. Please enter a unique UIN.',
       });
       return;
     }
@@ -102,26 +108,17 @@ export default function NewReportPage() {
         return;
     }
 
+    // A single report object.
     const reportData = {
         ...values,
+        id: values.uin, // Explicitly set id to match uin
         entryDate: serverTimestamp(),
         enteredBy: user.uid,
     };
     
-    const publicReportData = {
-      uin: values.uin,
-      applicantName: values.applicantName,
-      district: values.district,
-      category: values.category,
-      entryDate: serverTimestamp(),
-    };
-
+    // The only write operation is to the user's own subcollection.
     const userReportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
     setDocumentNonBlocking(userReportRef, reportData, { merge: true });
-
-    const publicReportRef = doc(firestore, 'test_reports_public', values.uin);
-    setDocumentNonBlocking(publicReportRef, publicReportData, { merge: true });
-
 
     toast({
       title: 'Report Submitted',

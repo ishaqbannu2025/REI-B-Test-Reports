@@ -15,7 +15,7 @@ import { Logo } from '@/components/logo';
 import type { TestReport } from '@/lib/types';
 import Link from 'next/link';
 import { useFirebase } from '@/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs, Timestamp } from 'firebase/firestore';
 
 export default function VerifyPage() {
   const [uin, setUin] = useState('');
@@ -32,16 +32,21 @@ export default function VerifyPage() {
     setSearched(true);
     setReport(null);
 
-    const reportsRef = collection(firestore, 'test_reports_public');
+    // Use a collection group query to search for the UIN across all users' reports.
+    const reportsRef = collectionGroup(firestore, 'testReports');
     const q = query(reportsRef, where('uin', '==', uin));
 
     try {
       const querySnapshot = await getDocs(q);
       if (!querySnapshot.empty) {
         const reportDoc = querySnapshot.docs[0];
-        // Firestore timestamps need to be converted to JS Dates
-        const data = reportDoc.data() as Omit<TestReport, 'entryDate'> & { entryDate: { toDate: () => Date } };
-        setReport({ ...data, id: reportDoc.id, entryDate: data.entryDate.toDate() });
+        // Firestore timestamps need to be converted to JS Dates for display
+        const data = reportDoc.data() as TestReport;
+        
+        // Ensure entryDate is a JS Date
+        const entryDate = data.entryDate instanceof Timestamp ? data.entryDate.toDate() : new Date(data.entryDate as any);
+
+        setReport({ ...data, id: reportDoc.id, entryDate });
       } else {
         setReport(null);
       }
