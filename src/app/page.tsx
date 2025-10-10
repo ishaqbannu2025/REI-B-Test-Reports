@@ -13,9 +13,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
-import { useFirebase, initiateEmailSignIn, useUser } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,7 +35,27 @@ export default function LoginPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    initiateEmailSignIn(auth, email, password);
+    if (!auth) return;
+    
+    signInWithEmailAndPassword(auth, email, password)
+      .catch((error) => {
+        if (error.code === 'auth/user-not-found') {
+          // If user not found, create a new user
+          return createUserWithEmailAndPassword(auth, email, password);
+        } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+          toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Invalid credentials. Please check your email and password.",
+          });
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Login Error",
+                description: error.message,
+            });
+        }
+      });
   };
   
   if (isUserLoading || user) {
