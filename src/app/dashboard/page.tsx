@@ -35,8 +35,8 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+    <div className="grid auto-rows-max items-start gap-4 md:gap-8">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           title="Total Reports"
           value={totalReports}
@@ -62,7 +62,7 @@ export default function DashboardPage() {
           description="Total business connections"
         />
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+      <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
         <CategoryChart data={chartData} />
         <RecentReports reports={testReports as TestReport[]} />
       </div>
