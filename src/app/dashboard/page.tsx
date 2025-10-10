@@ -4,28 +4,13 @@ import { StatCard } from './components/stat-card';
 import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
-import type { TestReport, User } from '@/lib/types';
-import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
-import { collection, query, orderBy, getDocs, collectionGroup, getDocsFromCache, Query } from 'firebase/firestore';
+import type { TestReport } from '@/lib/types';
+import { useFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy, getDocs, doc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 // Helper function to check for admin role
 const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
-
-async function getDocsWithContext(q: Query) {
-  try {
-    return await getDocs(q);
-  } catch (error) {
-    const path = (q as any)._query.path.canonicalString();
-    const contextualError = new FirestorePermissionError({
-      operation: 'list',
-      path: path,
-    });
-    errorEmitter.emit('permission-error', contextualError);
-    // Re-throw the original error or the new contextual one if needed elsewhere
-    throw contextualError;
-  }
-}
 
 export default function DashboardPage() {
   const { firestore } = useFirebase();
@@ -35,33 +20,40 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!firestore || !user) return;
-    
+
     setIsLoading(true);
 
     const fetchReports = async () => {
       let reports: TestReport[] = [];
       try {
         if (isAdminUser(user)) {
-          // Admin: Fetch all reports from the collection group.
-          const reportsCollectionRef = collectionGroup(firestore, 'testReports');
-          const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
-          const reportsSnapshot = await getDocsWithContext(reportsQuery);
-          reportsSnapshot.forEach(reportDoc => {
-            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+          // Admin: Fetch all users, then fetch reports for each user.
+          const usersSnapshot = await getDocs(collection(firestore, 'users'));
+          const reportPromises = usersSnapshot.docs.map(userDoc => {
+            const userReportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
+            return getDocs(query(userReportsRef, orderBy('entryDate', 'desc')));
           });
+          
+          const reportSnapshots = await Promise.all(reportPromises);
+          reportSnapshots.forEach(reportSnapshot => {
+            reportSnapshot.forEach(reportDoc => {
+              reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+            });
+          });
+          // Since we are fetching from multiple users, we need to sort again.
+          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+
         } else {
           // Regular user: Fetch only their own reports
           const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
           const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
-          const reportsSnapshot = await getDocsWithContext(reportsQuery);
+          const reportsSnapshot = await getDocs(reportsQuery);
           reportsSnapshot.forEach(reportDoc => {
             reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
           });
         }
         setAllReports(reports);
       } catch (e: any) {
-        // Error is now handled by getDocsWithContext and emitted globally.
-        // We can still log here if needed for component-level debugging.
         console.error("Error fetching reports: ", e);
       } finally {
         setIsLoading(false);
