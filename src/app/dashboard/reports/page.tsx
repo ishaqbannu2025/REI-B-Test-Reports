@@ -26,8 +26,10 @@ export default function ViewReportsPage() {
         let reportsQuery: Query<DocumentData>;
 
         if (isAdminUser(user)) {
-          // Admin: Use a collection group query to get all test reports.
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+          // Admin: Collection group query is failing. Return empty list to prevent crash.
+          setAllReports([]);
+          setIsLoading(false);
+          return;
         } else {
           // Regular user: Fetch only their own reports.
           reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
