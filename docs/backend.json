@@ -81,6 +81,42 @@
         "enteredBy"
       ]
     },
+    "TestReportPublic": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TestReportPublic",
+      "type": "object",
+      "description": "Publicly accessible subset of a test report for verification.",
+      "properties": {
+        "uin": {
+          "type": "string",
+          "description": "Unique Identification Number (UIN) for the test report."
+        },
+        "applicantName": {
+          "type": "string",
+          "description": "Name of the applicant."
+        },
+        "district": {
+          "type": "string",
+          "description": "District of the applicant."
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the connection."
+        },
+        "entryDate": {
+          "type": "string",
+          "description": "Date the report was entered.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uin",
+        "applicantName",
+        "district",
+        "category",
+        "entryDate"
+      ]
+    },
     "User": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
@@ -153,6 +189,22 @@
         }
       },
       {
+        "path": "/test_reports_public/{uin}",
+        "definition": {
+          "entityName": "TestReportPublic",
+          "schema": {
+            "$ref": "#/backend/entities/TestReportPublic"
+          },
+          "description": "A public collection for verifying test reports by UIN. This collection stores a subset of the full report data and is readable by anyone.",
+          "params": [
+            {
+              "name": "uin",
+              "description": "The Unique Identification Number (UIN) of the test report."
+            }
+          ]
+        }
+      },
+      {
         "path": "/roles_admin/{userId}",
         "definition": {
           "entityName": "adminRole",
@@ -172,3 +224,5 @@
     "reasoning": "The Firestore structure is designed to securely manage electrical test reports, catering to different user roles (Admin, Data Entry User) and an optional public verification feature. It prioritizes authorization independence by associating TestReports directly with the user who created them. Roles are managed using path-based ownership and existence checks for admin roles.\n\n**Authorization Independence:**\nEach `TestReport` is stored within a subcollection of the user who created it `/users/{userId}/testReports/{testReportId}`. This structure inherently denormalizes the 'enteredBy' (userId) authorization context directly into the document path, eliminating the need for `get()` calls to determine ownership.\n\n**QAPs (Rules are not Filters):**\n*   Secure list operations are enabled by structural segregation. Admins can access all reports, but normal users can only list reports under their own user ID, enforced through security rules on the `/users/{userId}/testReports` path.\n\n**Additional Notes:**\n* The public verification feature now uses a collection group query on `testReports` to find a report by its UIN. This is secure because read rules on the `testReports` collection can be configured to allow public reads for certain fields if necessary, or remain restricted to authenticated users."
   }
 }
+
+    
