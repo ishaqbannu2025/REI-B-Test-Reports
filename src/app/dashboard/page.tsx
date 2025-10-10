@@ -5,28 +5,12 @@ import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, orderBy, getDocs, doc, CollectionReference, Query, collectionGroup } from 'firebase/firestore';
+import { useFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy, getDocs, Query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 // Helper function to check for admin role
 const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
-
-async function getDocsWithContext(q: Query) {
-    try {
-        return await getDocs(q);
-    } catch (error) {
-        const path = (q as any)._query.path.canonicalString();
-        const contextualError = new FirestorePermissionError({
-            operation: 'list',
-            path: path,
-        });
-        errorEmitter.emit('permission-error', contextualError);
-        // Re-throw the original error if you want to handle it further up,
-        // but for this case, we let the global handler manage it.
-        throw contextualError;
-    }
-}
 
 export default function DashboardPage() {
   const { firestore } = useFirebase();
@@ -42,24 +26,36 @@ export default function DashboardPage() {
     const fetchReports = async () => {
       let reports: TestReport[] = [];
       try {
-        let reportsQuery: Query;
-
         if (isAdminUser(user)) {
-          // Admin: Use a collectionGroup query to get all testReports.
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+          // Admin: Fetch all user docs, then get reports for each user.
+          const usersSnapshot = await getDocs(collection(firestore, 'users'));
+          const reportPromises = usersSnapshot.docs.map(userDoc => {
+            const userReportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
+            return getDocs(query(userReportsRef, orderBy('entryDate', 'desc')));
+          });
+
+          const reportSnapshots = await Promise.all(reportPromises);
+          reportSnapshots.forEach(snapshot => {
+            snapshot.forEach(reportDoc => {
+              reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+            });
+          });
+          // Sort all reports by entryDate since they are fetched in chunks
+          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+
         } else {
           // Regular user: Fetch only their own reports
-          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+          const reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+          const reportsSnapshot = await getDocs(reportsQuery);
+          reportsSnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+          });
         }
-
-        const reportsSnapshot = await getDocsWithContext(reportsQuery);
-        reportsSnapshot.forEach(reportDoc => {
-          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
 
         setAllReports(reports);
       } catch (e: any) {
-        // Errors are now thrown by getDocsWithContext and caught by the boundary
+        console.error("Error fetching reports: ", e);
+        // This is a good place to show a toast or an error message to the user
       } finally {
         setIsLoading(false);
       }
