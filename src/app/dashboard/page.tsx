@@ -28,7 +28,15 @@ export default function DashboardPage() {
         let reports: TestReport[] = [];
         if (isAdminUser(user)) {
           // Admin: fetch all users, then all reports for each user.
-          const usersSnapshot = await getDocs(collection(firestore, 'users'));
+          const usersRef = collection(firestore, 'users');
+          const usersSnapshot = await getDocs(usersRef).catch(error => {
+            // This is the specific point of failure. We create a contextual error here.
+            throw new FirestorePermissionError({
+                operation: 'list',
+                path: 'users',
+            });
+          });
+
           const reportPromises = usersSnapshot.docs.map(userDoc => {
             const reportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
             return getDocs(reportsRef);
@@ -40,7 +48,7 @@ export default function DashboardPage() {
             });
           });
           // Sort reports by entry date since they are fetched from multiple sources
-          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+          reports.sort((a, b) => new Date(b.entryDate as any).getTime() - new Date(a.entryDate as any).getTime());
         } else {
           // Regular user: Fetch only their own reports
           const reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
@@ -51,14 +59,12 @@ export default function DashboardPage() {
         }
         setAllReports(reports);
       } catch (error: any) {
-        // This is a simplified error handling for demonstration.
-        // In a real app, you would want to create a more specific contextual error.
-        const contextualError = new FirestorePermissionError({
-            operation: 'list',
-            path: error.path || 'unknown_path', // Attempt to get path, fallback
-        });
-        errorEmitter.emit('permission-error', contextualError);
-        console.error("Permission error:", error);
+        if (error instanceof FirestorePermissionError) {
+            errorEmitter.emit('permission-error', error);
+        } else {
+            // Handle other types of errors if necessary
+            console.error("An unexpected error occurred:", error);
+        }
       } finally {
         setIsLoading(false);
       }
