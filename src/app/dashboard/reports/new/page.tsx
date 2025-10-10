@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
-import { useFirebase, useUser, addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
 import {
   collection,
   query,
@@ -108,15 +108,13 @@ export default function NewReportPage() {
         enteredBy: user.uid,
     };
     
-    // Private report for the user
-    const userReportRef = collection(firestore, 'users', user.uid, 'testReports');
-    const privateDoc = await addDocumentNonBlocking(userReportRef, reportData);
+    // Create a reference for the private report using the UIN
+    const userReportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
+    setDocumentNonBlocking(userReportRef, reportData, { merge: true });
 
-    // Public verifiable report using the UIN as the document ID
-    if (privateDoc) {
-      const publicReportRef = doc(firestore, 'test_reports_public', privateDoc.id);
-      setDocumentNonBlocking(publicReportRef, reportData, { merge: true });
-    }
+    // Create a reference for the public report using the UIN
+    const publicReportRef = doc(firestore, 'test_reports_public', values.uin);
+    setDocumentNonBlocking(publicReportRef, { ...reportData, id: values.uin }, { merge: true });
 
 
     toast({
