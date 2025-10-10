@@ -108,13 +108,16 @@ export default function NewReportPage() {
         enteredBy: user.uid,
     };
     
+    // The public report object does not need an 'id' field, as the document ID is the UIN.
+    const publicReportData = { ...reportData };
+
     // Create a reference for the private report using the UIN
     const userReportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
     setDocumentNonBlocking(userReportRef, reportData, { merge: true });
 
     // Create a reference for the public report using the UIN
     const publicReportRef = doc(firestore, 'test_reports_public', values.uin);
-    setDocumentNonBlocking(publicReportRef, { ...reportData, id: values.uin }, { merge: true });
+    setDocumentNonBlocking(publicReportRef, publicReportData, { merge: true });
 
 
     toast({
