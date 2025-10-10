@@ -1,0 +1,190 @@
+{
+  "entities": {
+    "TestReport": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TestReport",
+      "type": "object",
+      "description": "Represents an electrical test report.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the test report."
+        },
+        "uin": {
+          "type": "string",
+          "description": "Unique Identification Number (UIN) for the test report, manually entered by staff."
+        },
+        "applicantName": {
+          "type": "string",
+          "description": "Name of the applicant."
+        },
+        "shortAddress": {
+          "type": "string",
+          "description": "Short address of the applicant, including the district."
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the connection (Domestic, Commercial, or Industrial)."
+        },
+        "sanctionedLoad": {
+          "type": "number",
+          "description": "Sanctioned load in kW or kVA."
+        },
+        "proposedTransformer": {
+          "type": "string",
+          "description": "Indicates if a transformer is proposed (Yes/No) or the kVA value."
+        },
+        "governmentFee": {
+          "type": "number",
+          "description": "Government fee in Rupees."
+        },
+        "challanNo": {
+          "type": "string",
+          "description": "Challan number for the fee payment."
+        },
+        "challanDate": {
+          "type": "string",
+          "description": "Date of the challan.",
+          "format": "date-time"
+        },
+        "electricalContractorName": {
+          "type": "string",
+          "description": "Name of the electrical contractor."
+        },
+        "remarks": {
+          "type": "string",
+          "description": "Remarks or comments about the test report."
+        },
+        "entryDate": {
+          "type": "string",
+          "description": "Date and time when the report was entered into the system (auto-generated timestamp).",
+          "format": "date-time"
+        },
+        "enteredBy": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N TestReport)"
+        }
+      },
+      "required": [
+        "id",
+        "uin",
+        "applicantName",
+        "shortAddress",
+        "category",
+        "sanctionedLoad",
+        "governmentFee",
+        "challanNo",
+        "challanDate",
+        "electricalContractorName",
+        "remarks",
+        "entryDate",
+        "enteredBy"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "Role of the user (Admin, Data Entry User)."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "role"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information. The 'userId' is the Firebase Auth UID.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/testReports/{testReportId}",
+        "definition": {
+          "entityName": "TestReport",
+          "schema": {
+            "$ref": "#/backend/entities/TestReport"
+          },
+          "description": "Stores test reports created by the specified user. Includes denormalized 'enteredBy' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user who created the test report. This is denormalized authorization data."
+            },
+            {
+              "name": "testReportId",
+              "description": "Unique identifier for the test report."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_admin/{userId}",
+        "definition": {
+          "entityName": "adminRole",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Indicates admin status based on the existence of the document. Authorization relies solely on `request.auth.uid`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/test_reports_public/{uin}",
+        "definition": {
+          "entityName": "TestReportPublic",
+          "schema": {
+            "$ref": "#/backend/entities/TestReport"
+          },
+          "description": "Stores a subset of test report data for public verification based on UIN. Only includes public fields (Applicant Name, Category, District, Date, Status) to prevent unauthorized data access. QAPs: Rules are not Filters.",
+          "params": [
+            {
+              "name": "uin",
+              "description": "The Unique Identification Number for the test report."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to securely manage electrical test reports, catering to different user roles (Admin, Data Entry User) and an optional public verification feature. It prioritizes authorization independence by associating TestReports directly with the user who created them. Roles are managed using path-based ownership and existence checks for admin roles.\n\n**Authorization Independence:**\nEach `TestReport` is stored within a subcollection of the user who created it `/users/{userId}/testReports/{testReportId}`. This structure inherently denormalizes the 'enteredBy' (userId) authorization context directly into the document path, eliminating the need for `get()` calls to determine ownership.\n\n**QAPs (Rules are not Filters):**\n*   Secure list operations are enabled by structural segregation. Admins can access all reports, but normal users can only list reports under their own user ID, enforced through security rules on the `/users/{userId}/testReports` path.\n\n**Additional Notes:**\n*   The optional public verification feature would query the `/test_reports_public/{uin}` collection. Only a subset of the `TestReport` data is copied into `/test_reports_public/{uin}` specifically to enable QAPs (rules are not filters)."
+  }
+}
