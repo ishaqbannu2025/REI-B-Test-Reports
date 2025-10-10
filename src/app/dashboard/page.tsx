@@ -5,12 +5,32 @@ import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport, User } from '@/lib/types';
-import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit, getDocs, DocumentData } from 'firebase/firestore';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, orderBy, getDocs, Query, DocumentData } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 // Helper function to check for admin role
 const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
+
+/**
+ * A wrapper around getDocs that includes contextual error handling for security rule violations.
+ * @param q The Firestore query to execute.
+ * @returns A promise that resolves with the query snapshot.
+ */
+async function getDocsWithContext(q: Query<DocumentData>) {
+  try {
+    return await getDocs(q);
+  } catch (error) {
+    const path = (q as any)._query.path.canonicalString();
+    const contextualError = new FirestorePermissionError({
+      operation: 'list',
+      path: path,
+    });
+    errorEmitter.emit('permission-error', contextualError);
+    // Re-throw the original error if needed, or handle it gracefully
+    throw contextualError;
+  }
+}
 
 export default function DashboardPage() {
   const { firestore } = useFirebase();
@@ -25,33 +45,38 @@ export default function DashboardPage() {
 
     const fetchReports = async () => {
       let reports: TestReport[] = [];
-      if (isAdminUser(user)) {
-        // Admin: Fetch all users, then fetch reports for each user
-        const usersCollectionRef = collection(firestore, 'users');
-        const usersSnapshot = await getDocs(usersCollectionRef);
+      try {
+        if (isAdminUser(user)) {
+          // Admin: Fetch all users, then fetch reports for each user
+          const usersCollectionRef = collection(firestore, 'users');
+          const usersSnapshot = await getDocsWithContext(usersCollectionRef);
 
-        for (const userDoc of usersSnapshot.docs) {
-          const reportsCollectionRef = collection(firestore, `users/${userDoc.id}/testReports`);
+          for (const userDoc of usersSnapshot.docs) {
+            const reportsCollectionRef = collection(firestore, `users/${userDoc.id}/testReports`);
+            const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
+            const reportsSnapshot = await getDocsWithContext(reportsQuery);
+            reportsSnapshot.forEach(reportDoc => {
+              reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+            });
+          }
+          // Since we fetch from multiple users, we need to sort again globally
+          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+
+        } else {
+          // Regular user: Fetch only their own reports
+          const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
           const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
-          const reportsSnapshot = await getDocs(reportsQuery);
+          const reportsSnapshot = await getDocsWithContext(reportsQuery);
           reportsSnapshot.forEach(reportDoc => {
             reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
           });
         }
-        // Since we fetch from multiple users, we need to sort again globally
-        reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
-
-      } else {
-        // Regular user: Fetch only their own reports
-        const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
-        const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
-        const reportsSnapshot = await getDocs(reportsQuery);
-        reportsSnapshot.forEach(reportDoc => {
-          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
+        setAllReports(reports);
+      } catch (e) {
+        console.info("Caught permission error, letting the listener handle it.");
+      } finally {
+        setIsLoading(false);
       }
-      setAllReports(reports);
-      setIsLoading(false);
     };
 
     fetchReports();
