@@ -1,13 +1,27 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useUser } from '@/firebase';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, orderBy, getDocs, Query } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
 // Helper function to check for admin role
 const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
+
+async function getDocsWithContext(q: Query) {
+  try {
+      return await getDocs(q);
+  } catch (error) {
+      const path = (q as any)._query.path.canonicalString();
+      const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: path,
+      });
+      errorEmitter.emit('permission-error', contextualError);
+      throw contextualError;
+  }
+}
 
 export default function ViewReportsPage() {
   const { firestore } = useFirebase();
@@ -25,10 +39,13 @@ export default function ViewReportsPage() {
       try {
         if (isAdminUser(user)) {
            // Admin: Fetch all users, then fetch reports for each user.
-           const usersSnapshot = await getDocs(collection(firestore, 'users'));
+           const usersCollection = collection(firestore, 'users');
+           const usersSnapshot = await getDocsWithContext(usersCollection);
+           
            const reportPromises = usersSnapshot.docs.map(userDoc => {
              const userReportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
-             return getDocs(query(userReportsRef, orderBy('entryDate', 'desc')));
+             const reportsQuery = query(userReportsRef, orderBy('entryDate', 'desc'));
+             return getDocsWithContext(reportsQuery);
            });
            
            const reportSnapshots = await Promise.all(reportPromises);
@@ -43,14 +60,14 @@ export default function ViewReportsPage() {
           // Regular user: Fetch only their own reports
           const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
           const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
-          const reportsSnapshot = await getDocs(reportsQuery);
+          const reportsSnapshot = await getDocsWithContext(reportsQuery);
           reportsSnapshot.forEach(reportDoc => {
             reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
           });
         }
         setAllReports(reports);
       } catch (e: any) {
-        console.error("Error fetching reports:", e);
+        // Errors are now thrown by getDocsWithContext and caught by the boundary
       } finally {
         setIsLoading(false);
       }
