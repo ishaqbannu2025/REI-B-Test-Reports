@@ -1,36 +1,59 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useCollection, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, orderBy, collectionGroup } from 'firebase/firestore';
+import { useFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
+import { useEffect, useState } from 'react';
+
+// Helper function to check for admin role
+const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
 
 export default function ViewReportsPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
-  
-  // Use a collection group query to get all reports if user is an admin.
-  // Otherwise, just get the reports for the current user.
-  // This assumes an 'Admin' role check, which should be properly implemented.
-  const reportsQuery = useMemoFirebase(
-    () => {
-        if (!firestore || !user) return null;
-        // Simple role check logic, this should be more robust in a real app
-        // (e.g., using custom claims).
-        const isAdmin = user.email === 'admin@example.gov'; 
-        
-        if (isAdmin) {
-            // Admin gets all reports from all users.
-            return query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-            // Regular user only gets their own reports.
-            return query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
-        }
-    },
-    [firestore, user]
-  );
+  const [allReports, setAllReports] = useState<TestReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: testReports, isLoading } = useCollection<TestReport>(reportsQuery);
+  useEffect(() => {
+    if (!firestore || !user) return;
+
+    setIsLoading(true);
+
+    const fetchReports = async () => {
+      let reports: TestReport[] = [];
+      if (isAdminUser(user)) {
+        // Admin: Fetch all users, then fetch reports for each user
+        const usersCollectionRef = collection(firestore, 'users');
+        const usersSnapshot = await getDocs(usersCollectionRef);
+
+        for (const userDoc of usersSnapshot.docs) {
+          const reportsCollectionRef = collection(firestore, `users/${userDoc.id}/testReports`);
+          const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
+          const reportsSnapshot = await getDocs(reportsQuery);
+          reportsSnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+          });
+        }
+         // Since we fetch from multiple users, we need to sort again globally
+        reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+
+      } else {
+        // Regular user: Fetch only their own reports
+        const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
+        const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
+        const reportsSnapshot = await getDocs(reportsQuery);
+        reportsSnapshot.forEach(reportDoc => {
+          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+        });
+      }
+      setAllReports(reports);
+      setIsLoading(false);
+    };
+
+    fetchReports();
+  }, [firestore, user]);
+
 
   if (isLoading) {
     return <div>Loading reports...</div>;
@@ -39,7 +62,7 @@ export default function ViewReportsPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Test Reports</h1>
-      <DataTable columns={columns} data={testReports || []} />
+      <DataTable columns={columns} data={allReports || []} />
     </div>
   );
 }

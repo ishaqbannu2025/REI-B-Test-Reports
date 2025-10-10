@@ -4,31 +4,68 @@ import { StatCard } from './components/stat-card';
 import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
-import type { TestReport } from '@/lib/types';
+import type { TestReport, User } from '@/lib/types';
 import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit, collectionGroup } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, DocumentData } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+
+// Helper function to check for admin role
+const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
 
 export default function DashboardPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
+  const [allReports, setAllReports] = useState<TestReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Query all test reports across all users for the dashboard
-  const allReportsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-  }, [firestore]);
+  useEffect(() => {
+    if (!firestore || !user) return;
+    
+    setIsLoading(true);
 
-  const { data: testReports, isLoading } = useCollection<TestReport>(allReportsQuery);
+    const fetchReports = async () => {
+      let reports: TestReport[] = [];
+      if (isAdminUser(user)) {
+        // Admin: Fetch all users, then fetch reports for each user
+        const usersCollectionRef = collection(firestore, 'users');
+        const usersSnapshot = await getDocs(usersCollectionRef);
+
+        for (const userDoc of usersSnapshot.docs) {
+          const reportsCollectionRef = collection(firestore, `users/${userDoc.id}/testReports`);
+          const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
+          const reportsSnapshot = await getDocs(reportsQuery);
+          reportsSnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+          });
+        }
+        // Since we fetch from multiple users, we need to sort again globally
+        reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+
+      } else {
+        // Regular user: Fetch only their own reports
+        const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
+        const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
+        const reportsSnapshot = await getDocs(reportsQuery);
+        reportsSnapshot.forEach(reportDoc => {
+          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+        });
+      }
+      setAllReports(reports);
+      setIsLoading(false);
+    };
+
+    fetchReports();
+  }, [firestore, user]);
   
-  if (isLoading || !testReports) {
+  if (isLoading || !allReports) {
     return <div>Loading Dashboard...</div>
   }
 
-  const totalReports = testReports.length;
-  const totalFees = testReports.reduce((acc, report) => acc + report.governmentFee, 0);
-  const domesticReports = testReports.filter(r => r.category === 'Domestic').length;
-  const commercialReports = testReports.filter(r => r.category === 'Commercial').length;
-  const industrialReports = testReports.filter(r => r.category === 'Industrial').length;
+  const totalReports = allReports.length;
+  const totalFees = allReports.reduce((acc, report) => acc + report.governmentFee, 0);
+  const domesticReports = allReports.filter(r => r.category === 'Domestic').length;
+  const commercialReports = allReports.filter(r => r.category === 'Commercial').length;
+  const industrialReports = allReports.filter(r => r.category === 'Industrial').length;
 
   const chartData: { category: string, count: number, fill: string }[] = [
     { category: 'Domestic', count: domesticReports, fill: 'var(--color-domestic)' },
@@ -66,7 +103,7 @@ export default function DashboardPage() {
       </div>
       <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
         <CategoryChart data={chartData} />
-        <RecentReports reports={testReports as TestReport[]} />
+        <RecentReports reports={allReports as TestReport[]} />
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { Logo } from '@/components/logo';
 import type { TestReport } from '@/lib/types';
 import Link from 'next/link';
 import { useFirebase } from '@/firebase';
-import { collectionGroup, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, collectionGroup } from 'firebase/firestore';
 
 export default function VerifyPage() {
   const [uin, setUin] = useState('');
@@ -33,6 +33,7 @@ export default function VerifyPage() {
     setReport(null);
 
     // Use a collection group query to search for the UIN across all users' reports.
+    // This requires a Firestore index on the 'testReports' collection group for the 'uin' field.
     const reportsRef = collectionGroup(firestore, 'testReports');
     const q = query(reportsRef, where('uin', '==', uin));
 
@@ -52,6 +53,7 @@ export default function VerifyPage() {
       }
     } catch (error) {
       console.error('Error searching for report:', error);
+      // This can happen if the required index is missing.
       setReport(null);
     } finally {
       setIsLoading(false);
@@ -133,7 +135,7 @@ export default function VerifyPage() {
               <p>
                 No report found for the UIN:{' '}
                 <span className="font-mono bg-muted px-2 py-1 rounded">{uin}</span>. Please check
-                the number and try again.
+                the number and try again. This may also occur if the required Firestore index has not been created yet.
               </p>
             )}
           </CardContent>

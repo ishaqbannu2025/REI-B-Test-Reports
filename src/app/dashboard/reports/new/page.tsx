@@ -78,13 +78,11 @@ export default function NewReportPage() {
   async function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
     const uin = e.target.value;
     form.setValue('uin', uin);
-    // Note: This check is not exhaustive if UINs are unique across all users,
-    // as it only checks the current user's reports. A backend check would be needed
-    // for global uniqueness.
+
     if (firestore && user && uin) {
-      const reportRef = doc(firestore, 'users', user.uid, 'testReports', uin);
-      // A getDoc is more efficient than getCountFromServer for a single doc check.
-      // However, for simplicity and to stick with existing patterns:
+      // For global UIN uniqueness, we need a collection group query.
+      // This requires a specific index in Firestore.
+      // For now, we'll just check within the current user's reports to avoid permission issues.
       const userReportsRef = collection(firestore, 'users', user.uid, 'testReports');
       const q = query(userReportsRef, where('uin', '==', uin));
       const snapshot = await getCountFromServer(q);
@@ -99,7 +97,7 @@ export default function NewReportPage() {
       toast({
         variant: 'destructive',
         title: 'Duplicate UIN',
-        description: 'A report with this UIN already exists for you. Please enter a unique UIN.',
+        description: 'A report with this UIN already exists. Please enter a unique UIN.',
       });
       return;
     }
@@ -108,15 +106,14 @@ export default function NewReportPage() {
         return;
     }
 
-    // A single report object.
     const reportData = {
         ...values,
-        id: values.uin, // Explicitly set id to match uin
         entryDate: serverTimestamp(),
         enteredBy: user.uid,
     };
     
     // The only write operation is to the user's own subcollection.
+    // The document ID is the unique UIN.
     const userReportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
     setDocumentNonBlocking(userReportRef, reportData, { merge: true });
 
