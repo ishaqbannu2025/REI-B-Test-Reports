@@ -6,7 +6,7 @@ import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, orderBy, getDocs, doc, CollectionReference, Query } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, CollectionReference, Query, collectionGroup } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 // Helper function to check for admin role
@@ -42,35 +42,21 @@ export default function DashboardPage() {
     const fetchReports = async () => {
       let reports: TestReport[] = [];
       try {
-        if (isAdminUser(user)) {
-          // Admin: Fetch all users, then fetch reports for each user.
-          const usersCollection = collection(firestore, 'users');
-          const usersSnapshot = await getDocsWithContext(usersCollection);
-          
-          const reportPromises = usersSnapshot.docs.map(userDoc => {
-            const userReportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
-            const reportsQuery = query(userReportsRef, orderBy('entryDate', 'desc'));
-            return getDocsWithContext(reportsQuery);
-          });
-          
-          const reportSnapshots = await Promise.all(reportPromises);
-          reportSnapshots.forEach(reportSnapshot => {
-            reportSnapshot.forEach(reportDoc => {
-              reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-            });
-          });
-          // Since we are fetching from multiple users, we need to sort again.
-          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+        let reportsQuery: Query;
 
+        if (isAdminUser(user)) {
+          // Admin: Use a collectionGroup query to get all testReports.
+          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
           // Regular user: Fetch only their own reports
-          const reportsCollectionRef = collection(firestore, `users/${user.uid}/testReports`);
-          const reportsQuery = query(reportsCollectionRef, orderBy('entryDate', 'desc'));
-          const reportsSnapshot = await getDocsWithContext(reportsQuery);
-          reportsSnapshot.forEach(reportDoc => {
-            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-          });
+          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
         }
+
+        const reportsSnapshot = await getDocsWithContext(reportsQuery);
+        reportsSnapshot.forEach(reportDoc => {
+          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+        });
+
         setAllReports(reports);
       } catch (e: any) {
         // Errors are now thrown by getDocsWithContext and caught by the boundary
