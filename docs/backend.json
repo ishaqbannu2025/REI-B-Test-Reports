@@ -160,13 +160,7 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user profile information. The 'userId' is the Firebase Auth UID.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The Firebase Auth UID of the user."
-            }
-          ]
+          "description": "Stores user profile information. The 'userId' is the Firebase Auth UID."
         }
       },
       {
@@ -177,17 +171,7 @@
           "schema": {
             "$ref": "#/backend/entities/TestReport"
           },
-          "description": "Stores test reports created by the specified user.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The Firebase Auth UID of the user who created the test report."
-            },
-            {
-              "name": "testReportId",
-              "description": "Unique identifier for the test report."
-            }
-          ]
+          "description": "Stores test reports created by the specified user."
         }
       }
     ],

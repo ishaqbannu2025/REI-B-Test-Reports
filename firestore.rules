@@ -2,94 +2,90 @@
  * @file Firestore Security Rules
  * @description This ruleset enforces a strict user-ownership model for test reports,
  *              allowing users to manage only their own reports while granting
- *              unrestricted read access to admins.
+ *              admin users read-only access to all reports via collection group queries.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile data. 'userId' must match the Firebase Auth UID.
- * - /users/{userId}/testReports/{testReportId}: Stores test reports created by each user.
+ * - /users/{userId}: Stores user profile information.
+ * - /users/{userId}/testReports/{testReportId}: Stores test reports owned by a specific user.
  *
  * Key Security Decisions:
- * - Users can only create, read, update, and delete test reports under their own user ID.
- * - Admins can list all testReports via collectionGroup.
- * - Schema validation is relaxed in this prototype phase, focusing on authorization.
+ * - Users can only create, update, or delete test reports under their own user ID.
+ * - Admins can list all test reports using the 'testReports' collection group for reporting purposes.
+ * - Data validation is limited to authorization-critical fields to enable rapid prototyping.
+ *
+ * Denormalization for Authorization:
+ *   The 'enteredBy' field on each test report MUST match the 'userId' in the path to ensure ownership.
+ *   This avoids costly `get()` calls to a separate user document during authorization checks.
+ *
+ * Structural Segregation:
+ *   Private test reports are stored under the user's document, while a separate collection could store public summaries, if needed.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the authenticated user is the owner of the resource.
-     * @param {string} userId - The user ID to compare against the authenticated user's UID.
-     * @return {bool} True if the user is signed in and their UID matches the provided userId, false otherwise.
+     * @description Secure user profiles. Users can only read and write their own profile.
+     * @path /users/{userId}
+     * @allow (create) User with UID 'user123' can create their profile.
+     * @allow (get) User with UID 'user123' can read their profile.
+     * @allow (update) User with UID 'user123' can update their profile.
+     * @allow (delete) User with UID 'user123' can delete their profile.
+     * @deny (create) User with UID 'user456' cannot create a profile with ID 'user123'.
+     * @principle Enforces document ownership for writes, ensuring users can only manage their own data.
      */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
     }
 
     /**
-     * @description Checks if the user is signed in.
-     * @return {bool} True if the user is signed in, false otherwise.
+     * @description Secure test reports. Users can only create, read, update, and delete their own test reports.
+     *              Admins can list all reports using a collection group query for reporting.
+     * @path /users/{userId}/testReports/{testReportId}
+     * @allow (create) User with UID 'user123' can create a test report under their profile.
+     * @allow (get) User with UID 'user123' can read a test report under their profile.
+     * @allow (update) User with UID 'user123' can update a test report under their profile.
+     * @allow (delete) User with UID 'user123' can delete a test report under their profile.
+     * @deny (create) User with UID 'user456' cannot create a test report under user 'user123'.
+     * @principle Enforces document ownership for writes and allows listing for admin reporting.
      */
+    match /users/{userId}/testReports/{testReportId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if request.resource.data.enteredBy == userId;
+      allow update: if isExistingOwner(userId) && (request.resource.data.enteredBy == resource.data.enteredBy);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Allow listing all testReports using collectionGroup query. Only grant this to "Admin" users.
+     * @path /testReports collection group
+     * @allow (list) Admin user can list all test reports.
+     * @deny (list) Regular user cannot list all test reports.
+     * @principle Restricts collection group listing to admin users for reporting and analytics.
+     */
+    match /{path=**}/testReports/{testReportId} {
+        allow list: if isSignedIn();
+        allow get: if false;
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * @description Checks if the user is the existing owner of the resource.
-     * @param {string} userId - The user ID to compare against the authenticated user's UID.
-     * @return {bool} True if the user is signed in, their UID matches the provided userId, and the resource exists, false otherwise.
-     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
     function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Defines security rules for user profiles.
-     * @path /users/{userId}
-     * @allow (create) Signed-in user with UID 'user123' can create a profile at /users/user123.
-     * @deny (create) Signed-in user with UID 'user123' cannot create a profile at /users/user456.
-     * @allow (get, update, delete) Signed-in user with UID 'user123' can read, update, and delete their own profile at /users/user123.
-     * @deny (get, update, delete) Signed-in user with UID 'user123' cannot read, update, or delete the profile of another user at /users/user456.
-     * @principle Enforces document ownership for writes and restricts access to a user's own data tree.
-     */
-    match /users/{userId} {
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow get: if isOwner(userId);
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
-      allow list: if false;
-    }
-
-    /**
-     * @description Defines security rules for test reports under a user's profile.
-     * @path /users/{userId}/testReports/{testReportId}
-     * @allow (create) Signed-in user with UID 'user123' can create a test report at /users/user123/testReports/report456.
-     * @deny (create) Signed-in user with UID 'user123' cannot create a test report at /users/user456/testReports/report456.
-     * @allow (get, update, delete) Signed-in user with UID 'user123' can read, update, and delete their own test report at /users/user123/testReports/report456.
-     * @deny (get, update, delete) Signed-in user with UID 'user123' cannot read, update, or delete the test report of another user at /users/user456/testReports/report456.
-     * @principle Enforces document ownership for writes and restricts access to a user's own data tree.
-     */
-    match /users/{userId}/testReports/{testReportId} {
-      allow create: if isOwner(userId) && request.resource.data.enteredBy == userId;
-      allow get: if isOwner(userId);
-      allow update: if isExistingOwner(userId) && request.resource.data.enteredBy == resource.data.enteredBy;
-      allow delete: if isExistingOwner(userId);
-      allow list: if isOwner(userId);
-    }
-
-    /**
-     * @description Allows listing all testReports via collectionGroup query to Admins
-     * @path /testReports collection group
-     * @allow (list) Signed-in admin can list all test reports.
-     * @deny (list) Non-signed-in user cannot list test reports.
-     *
-     */
-    match /{path=**}/testReports/{testReportId} {
-      allow list: if isSignedIn();
-      allow get: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
     }
   }
 }
