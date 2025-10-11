@@ -5,7 +5,7 @@ import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
@@ -38,28 +38,31 @@ export default function DashboardPage() {
 
     const fetchReports = async () => {
       let reportsQuery;
-      try {
-        const isAdmin = await isAdminUser(user, firestore);
+      
+      const isAdmin = await isAdminUser(user, firestore);
 
-        if (isAdmin) {
-          // Admin user: use a collection group query to fetch all reports.
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-          // Regular user: Fetch only their own reports.
-          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-        }
+      if (isAdmin) {
+        reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+      } else {
+        reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+      }
 
-        const querySnapshot = await getDocs(reportsQuery);
+      getDocs(reportsQuery).then(querySnapshot => {
         const reports: TestReport[] = [];
         querySnapshot.forEach(reportDoc => {
           reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
         });
         setAllReports(reports);
-      } catch (serverError: any) {
-        console.error("Firestore Error:", serverError);
-      } finally {
         setIsLoading(false);
-      }
+      }).catch(serverError => {
+        const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
+        const permissionError = new FirestorePermissionError({
+          operation: 'list',
+          path: path,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        setIsLoading(false);
+      });
     };
 
     fetchReports();
