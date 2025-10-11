@@ -123,9 +123,9 @@
       "type": "object",
       "description": "Represents a user of the system.",
       "properties": {
-        "id": {
+        "uid": {
           "type": "string",
-          "description": "Unique identifier for the user."
+          "description": "The user's unique ID from Firebase Authentication."
         },
         "email": {
           "type": "string",
@@ -136,13 +136,17 @@
           "type": "string",
           "description": "Role of the user (Admin, Data Entry User).",
           "enum": ["Admin", "Data Entry User"]
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "The URL of the user's profile picture."
         }
       },
-      "required": [
-        "id",
-        "email",
-        "role"
-      ]
+      "required": ["uid", "email", "role"]
     }
   },
   "auth": {
