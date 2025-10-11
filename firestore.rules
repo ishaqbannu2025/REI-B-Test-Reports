@@ -1,72 +1,78 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for test reports, 
- * with an exception for administrative access. It prioritizes data privacy and 
- * prevents unauthorized access to user-specific data.
- * 
- * Data Structure:
- * - /users/{userId}: Stores user profile information.
- * - /users/{userId}/testReports/{testReportId}: Stores test reports owned by the user.
- * 
- * Key Security Decisions:
- * - Users can only read/write their own test reports.
- * - Admins (if roles were implemented) would have broader access (not yet implemented).
- * - Listing all users is disallowed for privacy.
+ * @description This ruleset enforces a user-ownership model for test reports stored under user-specific paths.
+ * Users can only access test reports they own.
  *
- * Denormalization for Authorization:
- * - The `TestReport` entity has an `enteredBy` field to enforce the relationship between the report and its owner (`/users/{userId}`).
+ * @dataStructure
+ * - /users/{userId}: Stores user profile information.
+ * - /users/{userId}/testReports/{testReportId}: Stores test reports created by the specified user.
+ *
+ * @keySecurityDecisions
+ * - Users can only list test reports under their own user ID.
+ * - Users can only create test reports under their own user ID.
+ * - Users can only update or delete existing test reports they own.
+ * - No public listing of test reports is allowed outside of a user's own reports.
+ *
+ * @denormalizationForAuthorization
+ * - Test reports are stored as subcollections of user documents to easily enforce ownership. The `enteredBy` field duplicates `userId` but that is acceptable and expected.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Secure user profiles. Only the authenticated user can read/write their own profile.
+     * @description Controls access to user profile documents.
      * @path /users/{userId}
-     * @allow (get, create, update, delete) User with matching UID can access their profile.
-     *   Example: request.auth.uid == 'user123'
-     * @deny (get, create, update, delete) User attempts to access another user's profile.
-     *   Example: request.auth.uid != 'user123'
-     * @principle Enforces document ownership for user profiles.
+     * @allow (create) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can create their own profile document.
+     * @allow (get) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can get their own profile document.
+     * @allow (update) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can update their own profile document.
+     * @allow (delete) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can delete their own profile document.
+     * @deny (create) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot create a profile document for another user (e.g., 'otherUserId').
+     * @deny (get) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot get another user's profile document (e.g., 'otherUserId').
+     * @deny (update) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot update another user's profile document (e.g., 'otherUserId').
+     * @deny (delete) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot delete another user's profile document (e.g., 'otherUserId').
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
       allow get: if isOwner(userId);
-      allow list: if false; // Disable listing all users for privacy.
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.uid == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Secure test reports under a user's profile. Only the authenticated user can read/write their own reports.
+     * @description Controls access to test reports stored under a specific user's path.
      * @path /users/{userId}/testReports/{testReportId}
-     * @allow (create) User with matching UID can create a report under their profile.
-     *   Example: request.auth.uid == 'user123' && request.resource.data.enteredBy == 'user123'
-     * @allow (get, list, update, delete) User with matching UID can access their reports.
-     *   Example: request.auth.uid == 'user123'
-     * @deny (get, list, create, update, delete) User attempts to access another user's reports.
-     *   Example: request.auth.uid != 'user123'
-     * @principle Enforces document ownership for test reports. Validates that `enteredBy` field matches the `userId` in the path.
+     * @allow (create) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can create a test report under their own user ID.
+     * @allow (get) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can get a test report under their own user ID.
+     * @allow (list) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can list test reports under their own user ID.
+     * @allow (update) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can update a test report under their own user ID.
+     * @allow (delete) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' can delete a test report under their own user ID.
+     * @deny (create) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot create a test report under another user's ID (e.g., 'otherUserId').
+     * @deny (get) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot get a test report under another user's ID (e.g., 'otherUserId').
+     * @deny (list) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot list test reports under another user's ID (e.g., 'otherUserId').
+     * @deny (update) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot update a test report under another user's ID (e.g., 'otherUserId').
+     * @deny (delete) User with UID 'bNnG64AhVYYbSgVD6ihELp2522I3' cannot delete a test report under another user's ID (e.g., 'otherUserId').
+     * @principle Enforces document ownership and prevents unauthorized data access.
      */
     match /users/{userId}/testReports/{testReportId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-       // Checks that the user is signed in AND that the document exists
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
       allow get: if isOwner(userId);
-      allow list: if isOwner(userId); // Owner can list their own reports
+      allow list: if isOwner(userId);
       allow create: if isOwner(userId) && request.resource.data.enteredBy == userId;
-      allow update: if isExistingOwner(userId) && resource.data.enteredBy == userId; // Additional check that enteredBy cannot be changed
+      allow update: if isExistingOwner(userId) && request.resource.data.enteredBy == resource.data.enteredBy;
       allow delete: if isExistingOwner(userId);
     }
+  }
+
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  function isOwner(userId) {
+    return isSignedIn() && request.auth.uid == userId;
+  }
+
+  function isExistingOwner(userId) {
+    return isOwner(userId) && resource != null;
   }
 }
