@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import type { TestReport } from '@/lib/types';
 import Link from 'next/link';
-import { useFirebase } from '@/firebase';
+import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, where, getDocs, Timestamp, collectionGroup } from 'firebase/firestore';
 
 export default function VerifyPage() {
@@ -52,8 +52,11 @@ export default function VerifyPage() {
         setReport(null);
       }
     } catch (error) {
-      console.error('Error searching for report:', error);
-      // This can happen if the required index is missing.
+      const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: `testReports where uin == ${uin}`, // Approximate path for logging
+      });
+      errorEmitter.emit('permission-error', contextualError);
       setReport(null);
     } finally {
       setIsLoading(false);

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Printer, ArrowLeft } from 'lucide-react';
 import { Logo } from '@/components/logo';
-import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, getDoc, collectionGroup, query, where, getDocs } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
@@ -36,8 +36,12 @@ export default function ReportDetailPage() {
         } else {
           setReport(null);
         }
-      } catch (e) {
-        console.error("Error fetching report: ", e);
+      } catch (error) {
+        const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: `testReports where uin == ${id}`, // Approximate path for logging
+        });
+        errorEmitter.emit('permission-error', contextualError);
         setReport(null);
       } finally {
         setIsLoading(false);
