@@ -2,7 +2,7 @@
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
 import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
-import { collection, query, orderBy, getDocs, Query, DocumentData, collectionGroup } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, Query, DocumentData } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
@@ -26,23 +26,39 @@ export default function ViewReportsPage() {
         let reportsQuery: Query<DocumentData>;
 
         if (isAdminUser(user)) {
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+          // Admin user: fetch all users, then fetch reports for each user.
+          const usersCollectionRef = collection(firestore, 'users');
+          const usersSnapshot = await getDocs(usersCollectionRef).catch(error => {
+            throw new FirestorePermissionError({
+              operation: 'list',
+              path: 'users',
+            });
+          });
+
+          const reportPromises = usersSnapshot.docs.map(userDoc => {
+            const userReportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
+            const userReportsQuery = query(userReportsRef, orderBy('entryDate', 'desc'));
+            return getDocs(userReportsQuery);
+          });
+          
+          const reportSnapshots = await Promise.all(reportPromises);
+          reportSnapshots.forEach(reportSnapshot => {
+            reportSnapshot.forEach(reportDoc => {
+              reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+            });
+          });
+           // Sort all collected reports by date
+          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
+
         } else {
           // Regular user: Fetch only their own reports.
           reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-        }
-
-        const reportsSnapshot = await getDocs(reportsQuery).catch(error => {
-          throw new FirestorePermissionError({
-            operation: 'list',
-            path: 'testReports collection group',
+          const reportsSnapshot = await getDocs(reportsQuery);
+           reportsSnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
           });
-        });
+        }
         
-        reportsSnapshot.forEach(reportDoc => {
-          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
-
         setAllReports(reports);
       } catch (error: any) {
         if (error instanceof FirestorePermissionError) {
