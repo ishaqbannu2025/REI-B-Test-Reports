@@ -6,14 +6,17 @@ import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
-import { collection, query, orderBy, getDocs, Query, DocumentData } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
+import type { User } from 'firebase/auth';
 
 // Helper function to check for admin role using custom claims
-const isAdminUser = async (user: any): Promise<boolean> => {
+const isAdminUser = async (user: User | null): Promise<boolean> => {
   if (!user) return false;
   try {
     const idTokenResult = await user.getIdTokenResult();
+    // The 'admin' custom claim is set on the backend, not in client-side code.
+    // This check will return true if the claim is present.
     return idTokenResult.claims.admin === true;
   } catch (error) {
     console.error("Error getting user token claims:", error);
@@ -38,30 +41,18 @@ export default function DashboardPage() {
         const isAdmin = await isAdminUser(user);
 
         if (isAdmin) {
-          // Admin user: fetch all users, then fetch reports for each user.
-          const usersCollectionRef = collection(firestore, 'users');
-          const usersSnapshot = await getDocs(usersCollectionRef).catch(error => {
-            throw new FirestorePermissionError({
-              operation: 'list',
-              path: 'users',
-            });
+          // Admin user: use a collection group query to fetch all reports.
+          // This requires a composite index in Firestore on the 'testReports' collection group.
+          const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+           const querySnapshot = await getDocs(reportsQuery).catch(error => {
+              throw new FirestorePermissionError({
+                operation: 'list',
+                path: 'testReports',
+              });
+           });
+          querySnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
           });
-
-          const reportPromises = usersSnapshot.docs.map(userDoc => {
-            const userReportsRef = collection(firestore, `users/${userDoc.id}/testReports`);
-            const userReportsQuery = query(userReportsRef, orderBy('entryDate', 'desc'));
-            return getDocs(userReportsQuery);
-          });
-          
-          const reportSnapshots = await Promise.all(reportPromises);
-          reportSnapshots.forEach(reportSnapshot => {
-            reportSnapshot.forEach(reportDoc => {
-              reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-            });
-          });
-          // Sort all collected reports by date
-          reports.sort((a, b) => (b.entryDate as any) - (a.entryDate as any));
-
         } else {
           // Regular user: Fetch only their own reports.
           const reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
