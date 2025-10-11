@@ -32,8 +32,8 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
-import { useFirebase, setDocumentNonBlocking } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useFirebase, setDocumentNonBlocking, FirestorePermissionError, errorEmitter } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 // Note: This is a simplified approach. In a real app, you'd create the user
 // via a server-side function to securely handle passwords and roles.
@@ -86,24 +86,24 @@ export function AddUserDialog() {
 
     const userDocRef = doc(firestore, 'users', newUserId);
     
-    try {
-        // We'll just write to the users collection for this demo.
-        await new Promise(resolve => setDocumentNonBlocking(userDocRef, userData, { merge: false }));
-
+    setDoc(userDocRef, userData, { merge: false })
+      .then(() => {
         toast({
             title: 'User Created (Simulated)',
             description: `User ${values.name} has been added to the collection.`,
         });
         form.reset();
         setIsOpen(false);
-    } catch (error: any) {
-        toast({
-            variant: "destructive",
-            title: "Uh oh! Something went wrong.",
-            description: error.message || "Could not create user.",
+      })
+      .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: userDocRef.path,
+          operation: 'create',
+          requestResourceData: userData,
         });
-    }
 
+        errorEmitter.emit('permission-error', permissionError);
+      });
   }
 
   return (
