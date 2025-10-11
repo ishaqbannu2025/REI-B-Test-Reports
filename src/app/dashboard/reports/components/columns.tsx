@@ -1,3 +1,4 @@
+
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
@@ -14,8 +15,87 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
-import { Timestamp } from "firebase/firestore"
+import { Timestamp, doc } from "firebase/firestore"
 import { DateRange } from "react-day-picker"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { deleteDocumentNonBlocking, useFirebase } from "@/firebase"
+import { useToast } from "@/hooks/use-toast"
+import React from "react"
+
+
+const ReportActions = ({ report }: { report: TestReport }) => {
+  const { firestore } = useFirebase();
+  const { toast } = useToast();
+
+  const handleDelete = () => {
+    if (!firestore) return;
+
+    // Reports are stored at /users/{userId}/testReports/{reportId}
+    // report.id is the UIN, which is used as the document ID.
+    // report.enteredBy is the userId.
+    const reportRef = doc(firestore, `users/${report.enteredBy}/testReports/${report.id}`);
+    
+    deleteDocumentNonBlocking(reportRef);
+
+    toast({
+      title: "Report Deleted",
+      description: `Report with UIN ${report.uin} has been scheduled for deletion.`,
+    });
+  };
+
+  return (
+    <AlertDialog>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only">Open menu</span>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuItem asChild>
+            <Link href={`/dashboard/reports/${report.uin}`}>
+              View Details & Print
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem>Edit Report</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <AlertDialogTrigger asChild>
+            <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
+              Delete Report
+            </DropdownMenuItem>
+          </AlertDialogTrigger>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. This will permanently delete the test report with UIN <span className="font-mono bg-muted px-1.5 py-0.5 rounded">{report.uin}</span>.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
 
 export const columns: ColumnDef<TestReport>[] = [
   {
@@ -92,28 +172,7 @@ export const columns: ColumnDef<TestReport>[] = [
     id: "actions",
     cell: ({ row }) => {
       const report = row.original
-
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem asChild>
-              <Link href={`/dashboard/reports/${report.uin}`}>
-                View Details & Print
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem>Edit Report</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Delete Report</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
+      return <ReportActions report={report} />
     },
   },
 ]
