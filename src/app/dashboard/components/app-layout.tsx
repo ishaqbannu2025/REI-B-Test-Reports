@@ -114,12 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         <div className="transition-all group-data-[sidebar-state=expanded]:md:ml-64 md:ml-12">
           <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card px-4 sm:px-6">
-             <SidebarTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                    <PanelLeft />
-                    <span className="sr-only">Toggle Sidebar</span>
-                </Button>
-            </SidebarTrigger>
+             <SidebarTrigger className="md:hidden" />
             <div className="w-full flex-1">
               {/* Optional: Add a search bar or other header content here */}
             </div>
