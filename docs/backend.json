@@ -157,29 +157,19 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Stores user profile information. The 'userId' is the Firebase Auth UID."
-        }
+    "structure": {
+      "/users/{userId}": {
+        "schema": { "$ref": "#/entities/User" },
+        "description": "Stores user profile information. The 'userId' is the Firebase Auth UID."
       },
-      {
-        "path": "/users/{userId}/testReports/{testReportId}",
-        "collectionGroup": "testReports",
-        "definition": {
-          "entityName": "TestReport",
-          "schema": {
-            "$ref": "#/backend/entities/TestReport"
-          },
-          "description": "Stores test reports created by a specific user. This collection is part of the 'testReports' collection group."
-        }
+      "/users/{userId}/testReports/{testReportId}": {
+        "schema": { "$ref": "#/entities/TestReport" },
+        "description": "Stores test reports created by a specific user."
+      },
+      "testReports": {
+        "schema": { "$ref": "#/entities/TestReport" },
+        "description": "This represents the 'testReports' collection group, used for admin queries across all users."
       }
-    ],
-    "reasoning": "The Firestore structure is designed to securely manage electrical test reports. Admins can view all reports using a collection group query on 'testReports', which is efficient and secure. Regular users can only access reports within their own user subcollection. This structure balances security with functionality."
+    }
   }
 }
