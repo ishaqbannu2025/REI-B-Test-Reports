@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
-import { useFirebase } from '@/firebase';
+import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 
 export default function UsersPage() {
@@ -31,7 +31,11 @@ export default function UsersPage() {
       setUsers(fetchedUsers as UserProfile[]);
       setIsLoading(false);
     }, (error) => {
-      console.error("Error fetching users:", error);
+      const contextualError = new FirestorePermissionError({
+        operation: 'list',
+        path: usersCollectionRef.path,
+      });
+      errorEmitter.emit('permission-error', contextualError);
       setIsLoading(false);
     });
 
