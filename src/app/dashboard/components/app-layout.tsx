@@ -23,6 +23,7 @@ import {
   Users,
   Settings,
   LogOut,
+  PanelLeft,
 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { Logo } from '@/components/logo';
@@ -30,6 +31,7 @@ import { UserNav } from '@/components/user-nav';
 import type { NavItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase';
+import { Button } from '@/components/ui/button';
 
 const navItems: NavItem[] = [
   { href: '/dashboard', title: 'Dashboard', icon: LayoutDashboard },
@@ -111,9 +113,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </SidebarFooter>
         </Sidebar>
 
-        <div className="md:ml-12 group-data-[sidebar-state=expanded]:md:ml-64 transition-all">
+        <div className="group-data-[sidebar-state=expanded]:md:ml-64 md:ml-12 transition-all">
           <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card px-4 sm:px-6">
-            <SidebarTrigger className="md:hidden" />
+             <SidebarTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                    <PanelLeft />
+                    <span className="sr-only">Toggle Sidebar</span>
+                </Button>
+            </SidebarTrigger>
             <div className="w-full flex-1">
               {/* Optional: Add a search bar or other header content here */}
             </div>
