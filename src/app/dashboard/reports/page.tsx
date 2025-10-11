@@ -18,11 +18,7 @@ const isAdminUser = async (user: User | null, firestore: any): Promise<boolean> 
     return false;
   } catch (error) {
     console.error("Error checking admin status:", error);
-    const permissionError = new FirestorePermissionError({
-        operation: 'get',
-        path: userDocRef.path,
-    });
-    errorEmitter.emit('permission-error', permissionError);
+    // Don't emit here, as it can cause loops if the user collection is the one with permission issues
     return false;
   }
 };
@@ -39,33 +35,35 @@ export default function ViewReportsPage() {
     setIsLoading(true);
 
     const fetchReports = async () => {
-      const isAdmin = await isAdminUser(user, firestore);
       let reportsQuery;
+      try {
+        const isAdmin = await isAdminUser(user, firestore);
 
-      if (isAdmin) {
-        // Admin user: fetch all reports using a collection group query.
-        reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-      } else {
-        // Regular user: Fetch only their own reports.
-        reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-      }
-      
-      getDocs(reportsQuery).then(querySnapshot => {
+        if (isAdmin) {
+          // Admin user: fetch all reports using a collection group query.
+          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+        } else {
+          // Regular user: Fetch only their own reports.
+          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+        }
+        
+        const querySnapshot = await getDocs(reportsQuery);
         const reports: TestReport[] = [];
         querySnapshot.forEach(reportDoc => {
           reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
         });
         setAllReports(reports);
+
+      } catch (serverError: any) {
+         const path = `users/${user.uid}/testReports`;
+         const permissionError = new FirestorePermissionError({
+           operation: 'list',
+           path: path,
+         });
+         errorEmitter.emit('permission-error', permissionError);
+      } finally {
         setIsLoading(false);
-      }).catch(serverError => {
-        const path = (reportsQuery as any)._query.path.canonicalString() || `users/${user.uid}/testReports`;
-        const permissionError = new FirestorePermissionError({
-          operation: 'list',
-          path: path,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        setIsLoading(false);
-      });
+      }
     };
 
     fetchReports();
