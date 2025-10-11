@@ -178,7 +178,7 @@
     "collectionGroups": [
       {
         "collectionId": "testReports",
-        "description": "Collection group for querying all test reports across all users, primarily for admin views and public verification."
+        "description": "Collection group for querying all test reports across all users, for admin views and public verification."
       }
     ]
   }
