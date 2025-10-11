@@ -2,14 +2,13 @@
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
-import { AddUserDialog } from './components/add-user-dialog';
-import type { User } from '@/lib/types';
+import type { UserProfile } from '@/lib/types';
 import { useFirebase } from '@/firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 
 export default function UsersPage() {
   const { firestore } = useFirebase();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -23,13 +22,13 @@ export default function UsersPage() {
         const data = doc.data();
         return {
           id: doc.id,
-          name: data.displayName || data.email, // fallback to email
+          displayName: data.displayName || data.email, // fallback to email
           email: data.email,
           role: data.role || 'Data Entry User',
-          avatarUrl: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
+          photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
         }
       });
-      setUsers(fetchedUsers);
+      setUsers(fetchedUsers as UserProfile[]);
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching users:", error);
@@ -48,7 +47,6 @@ export default function UsersPage() {
     <div>
         <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-semibold">User Management</h1>
-            <AddUserDialog />
         </div>
         <DataTable columns={columns} data={users} />
     </div>

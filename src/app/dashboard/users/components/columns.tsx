@@ -1,7 +1,7 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
-import { User, UserRole } from "@/lib/types"
+import { UserProfile, UserRole } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -15,19 +15,19 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-export const columns: ColumnDef<User>[] = [
+export const columns: ColumnDef<UserProfile>[] = [
   {
-    accessorKey: "name",
+    accessorKey: "displayName",
     header: "Name",
     cell: ({ row }) => {
         const user = row.original;
         return (
             <div className="flex items-center gap-3">
                 <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatarUrl} alt={user.name} />
-                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={user.photoURL} alt={user.displayName} />
+                    <AvatarFallback>{user.displayName.charAt(0)}</AvatarFallback>
                 </Avatar>
-                <span className="font-medium">{user.name}</span>
+                <span className="font-medium">{user.displayName}</span>
             </div>
         )
     }
@@ -59,10 +59,10 @@ export const columns: ColumnDef<User>[] = [
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem>Edit User</DropdownMenuItem>
-            <DropdownMenuItem>Change Role</DropdownMenuItem>
+            <DropdownMenuItem disabled>Edit User</DropdownMenuItem>
+            <DropdownMenuItem disabled>Change Role</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Remove User</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" disabled>Remove User</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )

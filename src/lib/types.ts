@@ -22,12 +22,12 @@ export type TestReport = {
 
 export type UserRole = "Admin" | "Data Entry User";
 
-export type User = {
+export type UserProfile = {
   id: string;
-  name: string;
+  displayName: string;
   email: string;
   role: UserRole;
-  avatarUrl: string;
+  photoURL: string;
 };
 
 export type NavItem = {
