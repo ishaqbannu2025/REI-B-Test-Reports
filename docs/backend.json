@@ -167,13 +167,13 @@
           "$ref": "#/entities/TestReport"
         },
         "description": "Individual test reports are stored under the user who created them."
-      },
-      "testReports": {
-        "schema": {
-          "$ref": "#/entities/TestReport"
-        },
-        "description": "This represents the 'testReports' collection group, used for admin and public queries that span across all users."
       }
-    }
+    },
+    "collectionGroups": [
+      {
+        "collectionId": "testReports",
+        "description": "Collection group for querying all test reports across all users, primarily for admin views and public verification."
+      }
+    ]
   }
 }

@@ -64,7 +64,7 @@ export default function ReportDetailPage() {
     window.print();
   }
 
-  const getReportDate = (date: Date | Timestamp) => {
+  const getReportDate = (date: Date | Timestamp | string) => {
     if(date instanceof Timestamp) {
       return date.toDate().toLocaleDateString();
     }
@@ -138,7 +138,7 @@ export default function ReportDetailPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Short Address</span>
-              <span className="text-base">{report.shortAddress}, {report.district}</span>
+              <span className="text-base">{report.shortAddress}</span>
             </div>
             
             <div className="md:col-span-2 my-2 border-t"></div>
@@ -164,7 +164,7 @@ export default function ReportDetailPage() {
             </div>
              <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Challan No. / Date</span>
-              <span className="text-base">{report.challan}</span>
+              <span className="text-base">{report.challanNo} / {getReportDate(report.challanDate)}</span>
             </div>
              <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Electrical Contractor</span>

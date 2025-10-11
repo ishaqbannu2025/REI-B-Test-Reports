@@ -47,7 +47,8 @@ const formSchema = z.object({
   sanctionedLoad: z.string().min(1, 'Sanctioned load is required.'),
   proposedTransformer: z.string().min(1, 'Transformer info is required.'),
   governmentFee: z.coerce.number().min(0, 'Fee must be a positive number.'),
-  challan: z.string().min(1, 'Challan number/date is required.'),
+  challanNo: z.string().min(1, 'Challan number is required.'),
+  challanDate: z.string().min(1, 'Challan date is required.'),
   electricalContractorName: z.string().min(1, 'Contractor name is required.'),
   remarks: z.string().optional(),
 });
@@ -69,7 +70,8 @@ export default function NewReportPage() {
       sanctionedLoad: '',
       proposedTransformer: 'No',
       governmentFee: 0,
-      challan: '',
+      challanNo: '',
+      challanDate: '',
       electricalContractorName: '',
       remarks: '',
     },
@@ -296,20 +298,34 @@ export default function NewReportPage() {
                   </FormItem>
                 )}
               />
-              <FormField
+               <FormField
                 control={form.control}
-                name="challan"
+                name="challanNo"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Challan No. / Date</FormLabel>
+                    <FormLabel>Challan No.</FormLabel>
                     <FormControl>
-                      <Input placeholder="12345 / 2025-01-10" {...field} />
+                      <Input placeholder="12345" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
+               <FormField
+                control={form.control}
+                name="challanDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Challan Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" placeholder="2025-01-10" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+             <FormField
                 control={form.control}
                 name="electricalContractorName"
                 render={({ field }) => (
@@ -322,7 +338,6 @@ export default function NewReportPage() {
                   </FormItem>
                 )}
               />
-            </div>
 
             <FormField
               control={form.control}

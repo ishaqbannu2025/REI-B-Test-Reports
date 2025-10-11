@@ -13,7 +13,7 @@ export type TestReport = {
   sanctionedLoad: string;
   proposedTransformer: string;
   governmentFee: number;
-  challan: string;
+  challanNo: string;
   challanDate: string;
   electricalContractorName: string;
   remarks: string;
