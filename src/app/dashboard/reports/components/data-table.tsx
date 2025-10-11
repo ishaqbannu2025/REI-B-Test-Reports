@@ -5,6 +5,8 @@ import * as React from "react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import * as XLSX from "xlsx"
+import { addDays, format } from "date-fns"
+import { DateRange } from "react-day-picker"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -33,7 +35,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { FileDown } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+
+import { FileDown, Calendar as CalendarIcon } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -43,6 +52,7 @@ import {
 } from "@/components/ui/select"
 import { TestReport } from "@/lib/types"
 import { Timestamp } from "firebase/firestore"
+import { cn } from "@/lib/utils"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -56,6 +66,7 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+  const [date, setDate] = React.useState<DateRange | undefined>()
 
   const uniqueDistricts = React.useMemo(() => {
     return Array.from(new Set((data as TestReport[]).map(r => r.district)));
@@ -77,6 +88,15 @@ export function DataTable<TData, TValue>({
       columnVisibility,
     },
   })
+
+  React.useEffect(() => {
+    if (date?.from || date?.to) {
+      table.getColumn("entryDate")?.setFilterValue(date)
+    } else {
+      table.getColumn("entryDate")?.setFilterValue(undefined)
+    }
+  }, [date, table])
+
 
   const handleExportPDF = () => {
     const doc = new jsPDF()
@@ -131,7 +151,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-      <div className="flex items-center p-4 gap-4">
+      <div className="flex flex-wrap items-center p-4 gap-4">
         <Input
           placeholder="Filter by Applicant Name..."
           value={(table.getColumn("applicantName")?.getFilterValue() as string) ?? ""}
@@ -166,6 +186,45 @@ export function DataTable<TData, TValue>({
                 {uniqueDistricts.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            <div className={cn("grid gap-2")}>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn(
+                      "w-[300px] justify-start text-left font-normal",
+                      !date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date?.from ? (
+                      date.to ? (
+                        <>
+                          {format(date.from, "LLL dd, y")} -{" "}
+                          {format(date.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(date.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={date?.from}
+                    selected={date}
+                    onSelect={setDate}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleExportPDF}>

@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
+import { Timestamp } from "firebase/firestore"
+import { DateRange } from "react-day-picker"
 
 export const columns: ColumnDef<TestReport>[] = [
   {
@@ -72,6 +74,18 @@ export const columns: ColumnDef<TestReport>[] = [
       // Firestore Timestamps can come in as objects, so we need to convert them.
       const date = (dateValue as any).toDate ? (dateValue as any).toDate() : new Date(dateValue as string);
       return <div>{date.toLocaleDateString()}</div>
+    },
+    filterFn: (row, id, value) => {
+      const date = (row.getValue(id) as any).toDate ? (row.getValue(id) as any).toDate() : new Date(row.getValue(id) as string);
+      const { from, to } = value as DateRange;
+      if (from && !to) {
+        return date >= from;
+      } else if (!from && to) {
+        return date <= to;
+      } else if (from && to) {
+        return date >= from && date <= to;
+      }
+      return true;
     },
   },
   {
