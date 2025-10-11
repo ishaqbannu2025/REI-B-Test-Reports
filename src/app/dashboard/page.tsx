@@ -6,20 +6,27 @@ import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
-import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 
-// Helper function to check for admin role using custom claims
-const isAdminUser = async (user: User | null): Promise<boolean> => {
-  if (!user) return false;
+const isAdminUser = async (user: User | null, firestore: any): Promise<boolean> => {
+  if (!user || !firestore) return false;
+  const userDocRef = doc(firestore, 'users', user.uid);
   try {
-    const idTokenResult = await user.getIdTokenResult();
-    // The 'admin' custom claim is set on the backend, not in client-side code.
-    // This check will return true if the claim is present.
-    return idTokenResult.claims.admin === true;
+    const userDoc = await getDoc(userDocRef);
+    if (userDoc.exists()) {
+      return userDoc.data().role === 'Admin';
+    }
+    return false;
   } catch (error) {
-    console.error("Error getting user token claims:", error);
+    console.error("Error checking admin status:", error);
+    // Emit a more specific error if needed
+    const permissionError = new FirestorePermissionError({
+        operation: 'get',
+        path: userDocRef.path,
+    });
+    errorEmitter.emit('permission-error', permissionError);
     return false;
   }
 };
@@ -36,7 +43,7 @@ export default function DashboardPage() {
     setIsLoading(true);
 
     const fetchReports = async () => {
-      const isAdmin = await isAdminUser(user);
+      const isAdmin = await isAdminUser(user, firestore);
       let reportsQuery;
 
       if (isAdmin) {
