@@ -2,6 +2,9 @@
 "use client"
 
 import * as React from "react"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+import * as XLSX from "xlsx"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -14,7 +17,6 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-
 import {
   Table,
   TableBody,
@@ -40,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TestReport } from "@/lib/types"
+import { Timestamp } from "firebase/firestore"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -74,6 +77,57 @@ export function DataTable<TData, TValue>({
       columnVisibility,
     },
   })
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF()
+    autoTable(doc, {
+      head: [
+        [
+          "UIN",
+          "Applicant Name",
+          "Category",
+          "District",
+          "Fee (Rs)",
+          "Entry Date",
+        ],
+      ],
+      body: table.getRowModel().rows.map((row) => {
+        const report = row.original as TestReport;
+        const dateValue = report.entryDate;
+        const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue as string);
+        return [
+          report.uin,
+          report.applicantName,
+          report.category,
+          report.district,
+          report.governmentFee.toLocaleString(),
+          date.toLocaleDateString(),
+        ];
+      }),
+    });
+    doc.save("test-reports.pdf")
+  }
+
+  const handleExportExcel = () => {
+    const worksheetData = table.getRowModel().rows.map((row) => {
+      const report = row.original as TestReport;
+      const dateValue = report.entryDate;
+      const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue as string);
+      return {
+        UIN: report.uin,
+        "Applicant Name": report.applicantName,
+        Category: report.category,
+        District: report.district,
+        "Fee (Rs)": report.governmentFee,
+        "Entry Date": date.toLocaleDateString(),
+      };
+    });
+    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Test Reports");
+    XLSX.writeFile(workbook, "test-reports.xlsx");
+  };
+
 
   return (
     <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -114,11 +168,11 @@ export function DataTable<TData, TValue>({
             </Select>
         </div>
         <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleExportPDF}>
                 <FileDown className="mr-2 h-4 w-4" />
                 Export PDF
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleExportExcel}>
                 <FileDown className="mr-2 h-4 w-4" />
                 Export Excel
             </Button>
