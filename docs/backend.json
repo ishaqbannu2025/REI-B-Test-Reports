@@ -162,11 +162,17 @@
         "schema": { "$ref": "#/entities/User" },
         "description": "Stores user profile information. The 'userId' is the Firebase Auth UID."
       },
-      "/testReports/{reportId}": {
+      "/users/{userId}/testReports/{reportId}": {
         "schema": {
           "$ref": "#/entities/TestReport"
         },
-        "description": "Individual test reports are stored under the user who created them (e.g., /users/{userId}/testReports/{reportId}). This path represents the 'testReports' collection group used for admin queries."
+        "description": "Individual test reports are stored under the user who created them."
+      },
+      "testReports": {
+        "schema": {
+          "$ref": "#/entities/TestReport"
+        },
+        "description": "This represents the 'testReports' collection group, used for admin and public queries that span across all users."
       }
     }
   }
