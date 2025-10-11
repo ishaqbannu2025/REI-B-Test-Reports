@@ -1,7 +1,7 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
@@ -18,7 +18,6 @@ const isAdminUser = async (user: User | null, firestore: any): Promise<boolean> 
     return false;
   } catch (error) {
     console.error("Error checking admin status:", error);
-    // Don't emit here, as it can cause loops if the user collection is the one with permission issues
     return false;
   }
 };
@@ -55,12 +54,7 @@ export default function ViewReportsPage() {
         setAllReports(reports);
 
       } catch (serverError: any) {
-         const path = `users/${user.uid}/testReports`;
-         const permissionError = new FirestorePermissionError({
-           operation: 'list',
-           path: path,
-         });
-         errorEmitter.emit('permission-error', permissionError);
+        console.error("Firestore Error:", serverError);
       } finally {
         setIsLoading(false);
       }
