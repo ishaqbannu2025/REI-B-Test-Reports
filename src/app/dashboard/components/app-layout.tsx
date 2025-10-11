@@ -22,6 +22,7 @@ import {
   Users,
   Settings,
   LogOut,
+  Search,
 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { Logo } from '@/components/logo';
@@ -29,6 +30,16 @@ import { UserNav } from '@/components/user-nav';
 import type { NavItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 
 
 const navItems: NavItem[] = [
@@ -50,15 +61,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen={true}>
       <div className="min-h-screen w-full bg-background">
         <Sidebar className="border-r bg-sidebar text-sidebar-foreground" collapsible="icon">
-          <SidebarHeader className="p-2">
+          <SidebarHeader className="p-4">
             <Link href="/dashboard" className={cn(
-              "flex items-center gap-2 font-semibold text-sidebar-primary-foreground",
+              "flex items-center gap-2 font-semibold text-lg",
               "group-data-[collapsible=icon]:justify-center"
             )}>
-              <Logo className="h-7 w-7" />
+              <Logo className="h-8 w-8" />
               <span className="group-data-[collapsible=icon]:hidden">REI-B Reports</span>
             </Link>
           </SidebarHeader>
@@ -75,7 +86,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       asChild
                       isActive={isActive}
                       tooltip={item.title}
-                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground"
+                      className="text-sidebar-foreground/80 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-semibold"
+                      variant="ghost"
                     >
                       <Link href={item.href}>
                         <item.icon />
@@ -91,7 +103,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname.startsWith('/dashboard/settings')} tooltip="Settings"
-                className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground">
+                className="text-sidebar-foreground/80 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground">
                   <Link href="/dashboard/settings">
                     <Settings />
                     <span>Settings</span>
@@ -100,7 +112,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={handleLogout} asChild tooltip="Logout"
-                className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                className="text-sidebar-foreground/80 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground">
                   <Link href="/">
                     <LogOut />
                     <span>Logout</span>
@@ -114,16 +126,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="md:ml-12 group-data-[sidebar-state=expanded]:md:ml-64 transition-all">
           <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6">
             <SidebarTrigger className="md:hidden" />
-            <div className="hidden md:block">
-              <h1 className="font-semibold text-lg">Regional Electric Inspectorate, Bannu</h1>
-              <p className="text-xs text-muted-foreground">
-                Energy & Power Department, Government of Khyber Pakhtunkhwa
-              </p>
+            <div className="w-full flex-1">
+              {/* Optional: Add a search bar or other header content here */}
             </div>
-            <div className="flex w-full items-center gap-4 md:ml-auto md:flex-initial">
-              <div className="ml-auto flex-1 sm:flex-initial">
-                <UserNav />
-              </div>
+            <div className="flex items-center gap-4 md:ml-auto">
+              <UserNav />
             </div>
           </header>
           <main className="flex-1 overflow-auto p-4 sm:p-6 md:p-8">{children}</main>

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,12 +40,9 @@ export default function LoginPage() {
     
     signInWithEmailAndPassword(auth, email, password)
       .catch((error) => {
-        // If login fails for any reason (user not found, wrong password),
-        // try creating the user. This ensures the default admin can always be created.
         if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
           return createUserWithEmailAndPassword(auth, email, password)
             .catch((createError) => {
-              // Handle cases where even user creation fails (e.g. weak password)
               toast({
                   variant: "destructive",
                   title: "Login Error",
@@ -62,26 +60,24 @@ export default function LoginPage() {
   };
   
   if (isUserLoading || user) {
-      return <div>Loading...</div>
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <p>Loading...</p>
+        </div>
+      )
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
-      <div className="absolute top-8 text-center">
-        <h1 className="text-2xl font-bold text-primary">Regional Electric Inspectorate, Bannu</h1>
-        <p className="text-muted-foreground">
-          Energy & Power Department, Government of Khyber Pakhtunkhwa
-        </p>
-      </div>
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4">
-            <Logo className="h-16 w-16" />
+    <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
+      <div className="flex items-center justify-center py-12">
+        <div className="mx-auto grid w-[350px] gap-6">
+          <div className="grid gap-2 text-center">
+            <Logo className="h-12 w-12 mx-auto" />
+            <h1 className="text-3xl font-bold">REI-B Reports Login</h1>
+            <p className="text-balance text-muted-foreground">
+              Enter your credentials to access the dashboard
+            </p>
           </div>
-          <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>Enter your email below to login to your account</CardDescription>
-        </CardHeader>
-        <CardContent>
           <form onSubmit={handleLogin} className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -116,8 +112,18 @@ export default function LoginPage() {
               Public Verification
             </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+      <div className="hidden bg-muted lg:block">
+        <Image
+          src="https://picsum.photos/seed/1/1200/1800"
+          alt="Placeholder"
+          data-ai-hint="office building"
+          width="1200"
+          height="1800"
+          className="h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
+        />
+      </div>
     </div>
   );
 }
