@@ -17,18 +17,15 @@ export default function ViewReportsPage() {
     if (!firestore || !user) return;
 
     const checkAdminStatus = async () => {
-      const userDocRef = doc(firestore, 'users', user.uid);
       try {
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists() && userDoc.data().role === 'Admin') {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
+        const idTokenResult = await user.getIdTokenResult();
+        setIsAdmin(idTokenResult.claims.role === 'Admin');
       } catch (e) {
+        console.error("Error checking admin status:", e);
         setIsAdmin(false);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     checkAdminStatus();

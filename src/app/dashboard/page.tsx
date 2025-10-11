@@ -1,4 +1,3 @@
-
 'use client';
 
 import { StatCard } from './components/stat-card';
@@ -21,19 +20,16 @@ export default function DashboardPage() {
     if (!firestore || !user) return;
 
     const checkAdminStatus = async () => {
-      const userDocRef = doc(firestore, 'users', user.uid);
       try {
         const idTokenResult = await user.getIdTokenResult();
-        if (idTokenResult.claims.role === 'Admin') {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
+        setIsAdmin(idTokenResult.claims.role === 'Admin');
       } catch (e) {
+        console.error("Error checking admin status:", e);
         setIsAdmin(false); // Default to non-admin on error
+      } finally {
+        // We set loading to false here, so the next effect can run
+        setIsLoading(false);
       }
-      // We set loading to false here, so the next effect can run
-      setIsLoading(false);
     };
 
     checkAdminStatus();

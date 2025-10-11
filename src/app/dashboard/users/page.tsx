@@ -18,18 +18,15 @@ export default function UsersPage() {
 
     const checkAdminStatus = async () => {
         setIsLoading(true);
-        const userDocRef = doc(firestore, 'users', authUser.uid);
         try {
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists() && userDoc.data().role === 'Admin') {
-                setIsAllowed(true);
-            } else {
-                setIsAllowed(false);
-            }
+            const idTokenResult = await authUser.getIdTokenResult();
+            setIsAllowed(idTokenResult.claims.role === 'Admin');
         } catch (error) {
+            console.error("Error checking admin status:", error);
             setIsAllowed(false);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     checkAdminStatus();
