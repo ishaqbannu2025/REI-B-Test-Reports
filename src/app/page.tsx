@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -43,20 +43,46 @@ export default function LoginPage() {
     if (!firestore) return;
 
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    const userDoc = await getDoc(userDocRef);
+    
+    try {
+      const userDoc = await getDoc(userDocRef);
 
-    if (!userDoc.exists()) {
-      // Document doesn't exist, so create it.
-      const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-      const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
+      if (!userDoc.exists()) {
+        const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
+        const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
 
-      await setDoc(userDocRef, {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
-        photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
-        role: isInitialAdmin ? 'Admin' : 'Data Entry User',
-      });
+        const newUserProfile = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+          photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
+          role: isInitialAdmin ? 'Admin' : 'Data Entry User',
+        };
+
+        // Create document with proper error handling
+        await setDoc(userDocRef, newUserProfile)
+          .catch(error => {
+            const contextualError = new FirestorePermissionError({
+              operation: 'create',
+              path: userDocRef.path,
+              requestResourceData: newUserProfile,
+            });
+            errorEmitter.emit('permission-error', contextualError);
+            throw contextualError; // Re-throw to be caught by the outer try/catch
+          });
+      }
+    } catch(error) {
+       if (error instanceof FirestorePermissionError) {
+         // Already handled, just re-throw or handle as needed
+         throw error;
+       }
+       // Catch errors from getDoc
+       const contextualError = new FirestorePermissionError({
+         operation: 'get',
+         path: userDocRef.path,
+       });
+       errorEmitter.emit('permission-error', contextualError);
+       throw contextualError;
     }
   };
 
@@ -69,12 +95,21 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       await handleUserSetup(userCredential.user);
     } catch (error: any) {
+      if (error instanceof FirestorePermissionError) {
+        // The detailed error is already thrown and will be displayed by the error boundary
+        return;
+      }
+
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         // If user doesn't exist, try to create a new one
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
           await handleUserSetup(newUserCredential.user);
         } catch (createError: any) {
+          if (createError instanceof FirestorePermissionError) {
+            // Detailed error already thrown
+            return;
+          }
           toast({
             variant: "destructive",
             title: "Sign-Up Error",
