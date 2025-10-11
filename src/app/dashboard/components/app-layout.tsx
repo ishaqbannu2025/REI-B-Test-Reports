@@ -112,7 +112,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </SidebarFooter>
         </Sidebar>
 
-        <div className="group-data-[sidebar-state=expanded]:md:ml-64 md:ml-12 transition-all">
+        <div className="transition-all group-data-[sidebar-state=expanded]:md:ml-64 md:ml-12">
           <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card px-4 sm:px-6">
              <SidebarTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden">
