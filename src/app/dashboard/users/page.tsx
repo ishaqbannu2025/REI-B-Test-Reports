@@ -4,23 +4,7 @@ import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
 import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
-import type { User } from 'firebase/auth';
-
-// Helper function to check for admin role using custom claims
-const isAdminUser = async (user: User | null): Promise<boolean> => {
-  if (!user) return false;
-  try {
-    const idTokenResult = await user.getIdTokenResult();
-    // The 'admin' custom claim is set on the backend, not in client-side code.
-    // This check will return true if the claim is present.
-    return idTokenResult.claims.admin === true;
-  } catch (error) {
-    console.error("Error getting user token claims:", error);
-    return false;
-  }
-};
-
+import { collection, onSnapshot, query, doc, getDoc } from 'firebase/firestore';
 
 export default function UsersPage() {
   const { firestore } = useFirebase();
@@ -30,29 +14,32 @@ export default function UsersPage() {
   const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
-    if (!authUser) return;
+    if (!authUser || !firestore) return;
 
-    // Step 1: Check if the user is an admin based on their auth token claims.
     const checkAdminStatus = async () => {
         setIsLoading(true);
-        const isAdmin = await isAdminUser(authUser);
-        setIsAllowed(isAdmin);
-        // We will stop loading here if user is not admin.
-        if (!isAdmin) {
-          setIsLoading(false);
+        const userDocRef = doc(firestore, 'users', authUser.uid);
+        try {
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists() && userDoc.data().role === 'Admin') {
+                setIsAllowed(true);
+            } else {
+                setIsAllowed(false);
+            }
+        } catch (error) {
+            setIsAllowed(false);
         }
+        setIsLoading(false);
     };
 
     checkAdminStatus();
-  }, [authUser]);
+  }, [authUser, firestore]);
 
   useEffect(() => {
-    // Step 2: If the user is not allowed, or services aren't ready, do nothing.
-    if (!firestore || !isAllowed) {
+    if (!firestore || !isAllowed || isLoading) {
         return;
     };
 
-    // Step 3: If user is an admin, fetch all users from the 'users' collection.
     const usersCollectionRef = collection(firestore, 'users');
     const q = query(usersCollectionRef);
 
@@ -69,19 +56,16 @@ export default function UsersPage() {
         }
       });
       setUsers(fetchedUsers as UserProfile[]);
-      setIsLoading(false); // Done loading once data is fetched.
     }, (error) => {
       const contextualError = new FirestorePermissionError({
         operation: 'list',
         path: usersCollectionRef.path,
       });
       errorEmitter.emit('permission-error', contextualError);
-      setIsLoading(false);
     });
 
     return () => unsubscribe();
-    // This effect depends on 'isAllowed'. It will only run AFTER the admin check is complete.
-  }, [firestore, isAllowed]);
+  }, [firestore, isAllowed, isLoading]);
 
 
   if (isLoading) {

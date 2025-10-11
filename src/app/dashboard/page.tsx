@@ -8,42 +8,46 @@ import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import type { User } from 'firebase/auth';
-
-const isAdminUser = async (user: User | null, firestore: any): Promise<boolean> => {
-  if (!user || !firestore) return false;
-  const userDocRef = doc(firestore, 'users', user.uid);
-  try {
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-      return userDoc.data().role === 'Admin';
-    }
-    return false;
-  } catch (error) {
-    console.error("Error checking admin status:", error);
-    return false;
-  }
-};
 
 export default function DashboardPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!firestore || !user) return;
 
-    setIsLoading(true);
+    const checkAdminStatus = async () => {
+      const userDocRef = doc(firestore, 'users', user.uid);
+      try {
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists() && userDoc.data().role === 'Admin') {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (e) {
+        setIsAdmin(false);
+      }
+    };
+
+    checkAdminStatus().then(() => setIsLoading(false));
+  }, [firestore, user]);
+
+
+  useEffect(() => {
+    if (isLoading || !firestore || !user) return; // Don't fetch until admin status is known
 
     const fetchReports = async () => {
       let reportsQuery;
       
-      const isAdmin = await isAdminUser(user, firestore);
-
       if (isAdmin) {
+        // Admin: Query the entire collection group
         reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
       } else {
+        // Regular user: Query their own subcollection
         reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
       }
 
@@ -53,7 +57,6 @@ export default function DashboardPage() {
           reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
         });
         setAllReports(reports);
-        setIsLoading(false);
       }).catch(serverError => {
         const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
         const permissionError = new FirestorePermissionError({
@@ -61,12 +64,11 @@ export default function DashboardPage() {
           path: path,
         });
         errorEmitter.emit('permission-error', permissionError);
-        setIsLoading(false);
       });
     };
 
     fetchReports();
-  }, [firestore, user]);
+  }, [firestore, user, isAdmin, isLoading]);
   
   if (isLoading) {
     return <div>Loading Dashboard...</div>
