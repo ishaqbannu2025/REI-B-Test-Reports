@@ -29,7 +29,7 @@ export default function DashboardPage() {
           setIsAdmin(false);
         }
       } catch (e) {
-        setIsAdmin(false);
+        setIsAdmin(false); // Default to non-admin on error
       } finally {
         setIsLoading(false);
       }

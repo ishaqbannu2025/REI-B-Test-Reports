@@ -37,6 +37,9 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (!firestore || !isAllowed || isLoading) {
+        if (!isLoading && !isAllowed) {
+            setUsers([]);
+        }
         return;
     };
 
