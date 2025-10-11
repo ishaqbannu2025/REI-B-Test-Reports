@@ -3,17 +3,49 @@ import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
-import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, onSnapshot, query, doc, getDoc } from 'firebase/firestore';
 
 export default function UsersPage() {
   const { firestore } = useFirebase();
+  const { user: authUser } = useUser();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
-    if (!firestore) return;
-    setIsLoading(true);
+    if (!firestore || !authUser) return;
+
+    // Step 1: Fetch the current user's profile to check their role
+    const checkAdminRole = async () => {
+        setIsLoading(true);
+        const userDocRef = doc(firestore, 'users', authUser.uid);
+        try {
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists() && userDoc.data().role === 'Admin') {
+                setIsAllowed(true);
+            } else {
+                setIsAllowed(false);
+                setIsLoading(false);
+            }
+        } catch (error) {
+            console.error("Error fetching user role:", error);
+            setIsAllowed(false);
+            setIsLoading(false);
+        }
+    };
+
+    checkAdminRole();
+  }, [firestore, authUser]);
+
+  useEffect(() => {
+    if (!firestore || !isAllowed) {
+        // If not allowed, don't attempt to fetch all users.
+        if (!isLoading) setUsers([]);
+        return;
+    };
+
+    // Step 2: If user is an admin, fetch all users.
     const usersCollectionRef = collection(firestore, 'users');
     const q = query(usersCollectionRef);
 
@@ -22,7 +54,8 @@ export default function UsersPage() {
         const data = doc.data();
         return {
           id: doc.id,
-          displayName: data.displayName || data.email, // fallback to email
+          uid: doc.id,
+          displayName: data.displayName || data.email,
           email: data.email,
           role: data.role || 'Data Entry User',
           photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
@@ -40,11 +73,20 @@ export default function UsersPage() {
     });
 
     return () => unsubscribe();
-  }, [firestore]);
+  }, [firestore, isAllowed, isLoading]);
 
 
   if (isLoading) {
     return <div>Loading users...</div>;
+  }
+  
+  if (!isAllowed && !isLoading) {
+      return (
+        <div>
+            <h1 className="text-2xl font-semibold mb-4">User Management</h1>
+            <p className="text-destructive">You do not have permission to view this page.</p>
+        </div>
+      )
   }
 
   return (

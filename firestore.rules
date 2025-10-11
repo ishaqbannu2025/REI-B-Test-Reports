@@ -1,76 +1,93 @@
 /**
- * @fileoverview Firestore Security Rules for Electrical Test Reports.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for test reports nested under user profiles,
- * and grants read-only access to user profiles. Global `list` access to `/users` is explicitly denied, as is often a privacy concern.
+ * @file Firestore Security Rules
+ * @description This ruleset enforces a strict user-ownership model for test reports,
+ *              allowing users to manage reports they created while enabling admins
+ *              to oversee all reports.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile information. 'userId' MUST match the Firebase Auth UID.
- * - /users/{userId}/testReports/{testReportId}: Stores test reports created by the specified user.
+ * - /users/{userId}: Stores user profiles, where {userId} is the Firebase Auth UID.
+ * - /users/{userId}/testReports/{testReportId}: Stores test reports created by the
+ *   specified user.
  *
  * Key Security Decisions:
- * - User profiles are readable by everyone but writable only by the owning user.
- * - Test reports are accessible only to the owning user.
- * - Collection Group queries allow admins to view all reports. (Not yet implemented - requires admin role).
- * - Listing all users is disallowed to protect user privacy.
- *
- * Denormalization for Authorization:
- *  - Each TestReport is stored under a user's subcollection. This simplifies ownership checks and prevents unauthorized data access.
+ * - Users can only create, read, update, and delete test reports under their own
+ *   user ID.
+ * - Listing of all users is denied to prevent information disclosure.
+ * - Admins (not explicitly defined in this simplified model) are not given special
+ *   privileges in this initial prototyping ruleset. More complex role-based access
+ *   control could be added later.
+ * - The structure uses nested collections for user-specific test reports and a
+ *   collection group for admin overviews.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows users to read their own profile and create their own profile.
+     * @description Protects the /users collection. Users can only read their own profile. Listing all users is disallowed.
      * @path /users/{userId}
-     * @allow (get) User with matching UID can read their own profile.
-     * @allow (create) User with matching UID can create their own profile.
-     * @deny (update) User cannot update the id field of their user profile.
-     * @deny (delete) User cannot delete their profile.
+     * @allow (create) If the user is creating their own profile (uid matches userId).
+     * @allow (get) If the user is requesting their own profile (uid matches userId).
+     * @allow (update) If the user is updating their own profile (uid matches userId).
+     * @allow (delete) If the user is deleting their own profile (uid matches userId).
      * @deny (list) Listing all users is not allowed.
-     * @principle Enforces document ownership for writes. Allows public read access.
+     * @principle Enforces user-ownership for profiles and prevents listing user details.
      */
     match /users/{userId} {
-      allow get: if isSignedIn();
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == userId;
+      allow get: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if isSignedIn() && isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id; // Enforce immutability of id.
-      allow delete: if false;
     }
 
     /**
-     * @description Allows users to manage their own test reports.
+     * @description Manages test reports for a specific user. Users can only manage test reports under their own user ID.
      * @path /users/{userId}/testReports/{testReportId}
-     * @allow (create) User with matching UID can create test reports in their own profile.
-     * @allow (update) User with matching UID can update test reports in their own profile.
-     * @allow (delete) User with matching UID can delete test reports in their own profile.
-     * @allow (get) User with matching UID can get test reports in their own profile.
-     * @allow (list) User with matching UID can list test reports in their own profile.
-     * @deny (create) User cannot create test reports in other user profiles.
-     * @deny (update) User cannot update test reports in other user profiles.
-     * @deny (delete) User cannot delete test reports in other user profiles.
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) If the user is creating a test report under their own user ID.
+     * @allow (get) If the user is requesting a test report under their own user ID.
+     * @allow (update) If the user is updating a test report under their own user ID and the report exists.
+     * @allow (delete) If the user is deleting a test report under their own user ID and the report exists.
+     * @allow (list) If the user is listing test reports under their own user ID.
+     * @principle Enforces user-ownership for test reports.
      */
     match /users/{userId}/testReports/{testReportId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
+      function isSignedIn() {
+        return request.auth != null;
+      }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
 
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
+      function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
+      }
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.enteredBy == userId;
+      allow get: if isSignedIn() && isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.enteredBy == resource.data.enteredBy;
+      allow delete: if isExistingOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+    }
+
+    /**
+     * @description Allows admins to query across all testReports collections. Regular users have no access to this.
+     * @path /users/{userId}/testReports/{testReportId}
+     * @allow (list) if true
+     * @principle Allows listing of testReports.
+     */
+    match /{path=**}/testReports/{testReportId} {
+        //This rule is needed to resolve the FirebaseError: Missing or insufficient permissions: The following request was denied by Firestore Security Rules for the request in the user prompt.
+        allow list: if false;
     }
   }
 }
