@@ -5,7 +5,7 @@ import { CategoryChart } from './components/category-chart';
 import { RecentReports } from './components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
@@ -20,6 +20,7 @@ export default function DashboardPage() {
     if (!firestore || !user) return;
 
     const checkAdminStatus = async () => {
+      setIsLoading(true);
       const userDocRef = doc(firestore, 'users', user.uid);
       try {
         const userDoc = await getDoc(userDocRef);
@@ -29,9 +30,8 @@ export default function DashboardPage() {
           setIsAdmin(false);
         }
       } catch (e) {
-        setIsAdmin(false); // Default to non-admin on error
+        setIsAdmin(false);
       } finally {
-        // This will trigger the report fetching useEffect
         setIsLoading(false);
       }
     };
@@ -41,38 +41,39 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
-    // Wait for user and admin status to be resolved
     if (isLoading || !firestore || !user) return;
 
-    const fetchReports = async () => {
-      try {
-        let reportsQuery;
-        
-        if (isAdmin) {
-          // Admin: Query the entire collection group
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-          // Regular user: Query their own subcollection
-          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-        }
-
-        const querySnapshot = await getDocs(reportsQuery);
-        const reports: TestReport[] = [];
-        querySnapshot.forEach(reportDoc => {
-          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
-        setAllReports(reports);
-      } catch (error) {
-        console.error("Error fetching reports: ", error);
-        // Silently fail for now to avoid error page, but log it.
-        // The security rules should prevent this, but it's good practice.
+    const fetchReports = () => {
+      let reportsQuery;
+      
+      if (isAdmin) {
+        reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+      } else {
+        reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
       }
+      
+      getDocs(reportsQuery)
+        .then(querySnapshot => {
+            const reports: TestReport[] = [];
+            querySnapshot.forEach(reportDoc => {
+                reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+            });
+            setAllReports(reports);
+        })
+        .catch(serverError => {
+            const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
+            const permissionError = new FirestorePermissionError({
+              operation: 'list',
+              path: path,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
     };
 
     fetchReports();
   }, [firestore, user, isAdmin, isLoading]);
   
-  if (isLoading) {
+  if (isLoading && allReports.length === 0) {
     return <div>Loading Dashboard...</div>
   }
 

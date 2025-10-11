@@ -1,7 +1,7 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
@@ -39,8 +39,7 @@ export default function ViewReportsPage() {
   useEffect(() => {
     if (isLoading || !firestore || !user) return;
 
-    const fetchReports = async () => {
-      try {
+    const fetchReports = () => {
         let reportsQuery;
         
         if (isAdmin) {
@@ -49,15 +48,22 @@ export default function ViewReportsPage() {
           reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
         }
         
-        const querySnapshot = await getDocs(reportsQuery);
-        const reports: TestReport[] = [];
-        querySnapshot.forEach(reportDoc => {
-          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
-        setAllReports(reports);
-      } catch (error) {
-         console.error("Error fetching reports: ", error);
-      }
+        getDocs(reportsQuery)
+            .then(querySnapshot => {
+                const reports: TestReport[] = [];
+                querySnapshot.forEach(reportDoc => {
+                    reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+                });
+                setAllReports(reports);
+            })
+            .catch(serverError => {
+                const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
+                const permissionError = new FirestorePermissionError({
+                    operation: 'list',
+                    path: path,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     };
 
     fetchReports();
