@@ -154,7 +154,13 @@
     "providers": [
       "password",
       "anonymous"
-    ]
+    ],
+    "customClaims": {
+      "role": {
+        "type": "string",
+        "enum": ["Admin", "Data Entry User"]
+      }
+    }
   },
   "firestore": {
     "structure": {

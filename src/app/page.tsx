@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -30,7 +31,7 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [email, setEmail] = useState('m.ishaqbannu@gmail.com');
+  const [email, setEmail] = useState('admin@example.gov');
   const [password, setPassword] = useState('Innovation123');
 
   useEffect(() => {
@@ -38,6 +39,15 @@ export default function LoginPage() {
       router.push('/dashboard');
     }
   }, [user, isUserLoading, router]);
+
+  const setAdminClaim = async (uid: string) => {
+    // This function will call our new API route to set a custom claim.
+    await fetch('/api/set-admin-claim', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ uid }),
+    });
+  };
 
   const handleUserSetup = async (firebaseUser: FirebaseUser) => {
     if (!firestore) return;
@@ -70,6 +80,19 @@ export default function LoginPage() {
             errorEmitter.emit('permission-error', contextualError);
             throw contextualError; // Re-throw to be caught by the outer try/catch
           });
+
+        if (isInitialAdmin) {
+            await setAdminClaim(firebaseUser.uid);
+             // Force refresh the token to get the new claim
+            await firebaseUser.getIdToken(true);
+        }
+      } else {
+        // If user exists, check if they are an admin and ensure claim is set
+        const userData = userDoc.data();
+        if (userData.role === 'Admin') {
+          await setAdminClaim(firebaseUser.uid);
+          await firebaseUser.getIdToken(true);
+        }
       }
     } catch(error) {
        if (error instanceof FirestorePermissionError) {
