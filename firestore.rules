@@ -1,35 +1,27 @@
 /**
- * @fileoverview Firestore Security Rules for Electrical Test Reports
+ * @fileoverview Firestore Security Rules for the electrical test reports application.
  *
  * Core Philosophy:
- * This ruleset enforces a multi-tenant data model where users have ownership over their test reports,
- * with admin users having broader access.
+ * This ruleset enforces a user-ownership model for test reports, where users can only manage reports they created.
+ * Admins have read access to all test reports, but cannot modify them directly through these rules (admin actions should be handled via trusted backend).
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile information. 'userId' must match the Firebase Auth UID.
+ * - /users/{userId}: Stores user profile data, with 'userId' matching the Firebase Auth UID.
  * - /users/{userId}/testReports/{testReportId}: Stores test reports created by each user.
- * - /testReports: Root level collection of all test reports, meant for admin access.
  *
  * Key Security Decisions:
- * - Users can only create, read, update, and delete test reports under their own user ID.
- * - Admins, as identified by their role in the /users/{userId} document, can read all test reports.
- * - Public listing of test reports is disallowed to prevent unauthorized data access.
+ * - User listing is disallowed for privacy.
+ * - The 'testReports' collection group allows admins to efficiently query all reports across all users for auditing and reporting.
  *
  * Denormalization for Authorization:
- * - The 'enteredBy' field within each TestReport document is used to track ownership.  This is
- *   validated on creation to match the user's UID, and immutability is enforced on updates.
- *
- * Structural Segregation:
- * - Using user subcollections (/users/{userId}/testReports) for user-owned data and a top-level
- *   collection (testReports) for admin access allows for efficient and secure data retrieval.
+ * - Each TestReport has an 'enteredBy' field which must match the UID of the user creating it. This is validated on creation and enforced as immutable on updates.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the user is signed in.
-     * @return {boolean} True if the user is signed in, false otherwise.
+     * @description Checks if the request is made by a signed-in user.
      */
     function isSignedIn() {
       return request.auth != null;
@@ -37,70 +29,71 @@ service cloud.firestore {
 
     /**
      * @description Checks if the authenticated user's UID matches the provided userId.
-     * @param {string} userId - The user ID to compare against.
-     * @return {boolean} True if the user is the owner, false otherwise.
+     * @param {string} userId - The user ID to compare against the authenticated user's UID.
      */
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
      * @description Checks if the authenticated user is an existing owner of the document.
-     * @param {string} userId - The user ID to compare against.
-     * @return {boolean} True if the user is the owner and the resource exists, false otherwise.
+     * @param {string} userId - The user ID to compare against the authenticated user's UID and the resource ID.
      */
     function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+      return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Checks if the authenticated user is an admin.
-     * @return {boolean} True if the user is an admin, false otherwise.
+     * @description Defines the Admin role.
+     * For simplicity in this Prototyping Phase, all logged in users are effectively admins.
+     * In a Production deployment, this function must use custom claims to identify actual admins.
+     * @returns {boolean} - Whether the user has the 'Admin' role.
      */
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+        return isSignedIn(); // In production, check for custom claims here.
     }
 
     /**
-     * @description Rules for user profile documents.
+     * @description Security rules for user profiles.
      * @path /users/{userId}
-     * @allow (create) - If the user's UID matches the userId.
-     * @deny (create) - If the user's UID does not match the userId.
-     * @allow (get, update, delete) - If the user's UID matches the userId.
-     * @deny (get, update, delete) - If the user's UID does not match the userId.
-     * @principle Enforces document ownership and prevents unauthorized access to user profiles.
+     * @allow (create) - If the user is creating their own profile (userId matches auth.uid).
+     * @allow (get, update, delete) - If the user is the owner of the profile.
+     * @deny (list) - User listing is not allowed.
+     * @principle Enforces user-ownership for profile data and prevents unauthorized access.
      */
     match /users/{userId} {
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == userId;
-      allow get, update, delete: if isSignedIn() && isExistingOwner(userId);
+      allow get: if isOwner(userId);
       allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for test reports within a user's subcollection.
+     * @description Security rules for test reports within a user's subcollection.
      * @path /users/{userId}/testReports/{testReportId}
-     * @allow (create) - If the user's UID matches the userId and enteredBy matches the userId.
-     * @deny (create) - If the user's UID does not match the userId or enteredBy does not match the userId.
-     * @allow (get, update, delete) - If the user's UID matches the userId.
-     * @deny (get, update, delete) - If the user's UID does not match the userId.
-     * @principle Enforces document ownership and prevents unauthorized access to test reports.
+     * @allow (create) - If the user is creating a new report in their own subcollection and the 'enteredBy' field matches their UID.
+     * @allow (get, list, update, delete) - If the user is the owner of the report (created it).
+     * @principle Enforces user-ownership for test reports and validates the 'enteredBy' field on creation.
      */
     match /users/{userId}/testReports/{testReportId} {
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.enteredBy == userId;
-      allow get, update, delete: if isSignedIn() && isExistingOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.enteredBy == request.auth.uid;
+      allow update: if isExistingOwner(userId) && request.resource.data.enteredBy == resource.data.enteredBy; // Prevent changes to enteredBy
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for the root-level testReports collection.  This is where admin users can see all reports.
-     * @path /testReports/{testReportId}
-     * @allow (get, list) - If the user is an admin.
-     * @deny (create, update, delete) - Always deny direct write access to this collection to prevent bypassing ownership.
-     * @principle Restricts write access to prevent unauthorized modification of reports; read access allowed for admins only.
+     * @description Security rules for accessing all testReports using collection group query.
+     * @path /testReports
+     * @allow (list) - If the user is an admin.
+     * @deny (get, create, update, delete) - Only listing is allowed via collection group query.
+     * @principle Allows admins to view all test reports for auditing and reporting.
      */
-    match /testReports/{testReportId} {
-      allow get, list: if isSignedIn() && isAdmin();
-      allow create, update, delete: if false;
+    match /{path=**}/testReports/{testReportId} {
+        allow list: if isAdmin();
+        allow get, create, update, delete: if false;
     }
   }
 }
