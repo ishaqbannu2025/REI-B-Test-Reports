@@ -176,7 +176,7 @@
           "schema": {
             "$ref": "#/backend/entities/TestReport"
           },
-          "description": "Stores test reports created by the specified user."
+          "description": "Stores test reports created by a specific user. This collection is part of the 'testReports' collection group."
         }
       }
     ],
