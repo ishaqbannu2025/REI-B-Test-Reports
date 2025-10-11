@@ -30,10 +30,12 @@ export default function DashboardPage() {
         }
       } catch (e) {
         setIsAdmin(false);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    checkAdminStatus().then(() => setIsLoading(false));
+    checkAdminStatus();
   }, [firestore, user]);
 
 
