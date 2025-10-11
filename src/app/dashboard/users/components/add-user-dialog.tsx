@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
-import { useFirebase, setDocumentNonBlocking, FirestorePermissionError, errorEmitter } from '@/firebase';
+import { useFirebase, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
 // Note: This is a simplified approach. In a real app, you'd create the user
@@ -86,16 +86,23 @@ export function AddUserDialog() {
 
     const userDocRef = doc(firestore, 'users', newUserId);
     
-    // Use the non-blocking firestore update with built-in error handling
-    setDocumentNonBlocking(userDocRef, userData, { merge: false });
-
-    // Optimistically show success toast and close dialog
-    toast({
-      title: 'User Creation Sent',
-      description: `Request to create user ${values.name} has been sent.`,
-    });
-    form.reset();
-    setIsOpen(false);
+    setDoc(userDocRef, userData)
+      .then(() => {
+        toast({
+          title: 'User Created',
+          description: `User ${values.name} has been successfully created.`,
+        });
+        form.reset();
+        setIsOpen(false);
+      })
+      .catch((error) => {
+        const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'create',
+            requestResourceData: userData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   }
 
   return (
