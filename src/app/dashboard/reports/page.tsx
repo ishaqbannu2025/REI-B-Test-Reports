@@ -1,7 +1,7 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
@@ -40,28 +40,24 @@ export default function ViewReportsPage() {
     if (isLoading || !firestore || !user) return;
 
     const fetchReports = async () => {
-      let reportsQuery;
-      
-      if (isAdmin) {
-        reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-      } else {
-        reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-      }
-      
-      getDocs(reportsQuery).then(querySnapshot => {
+      try {
+        let reportsQuery;
+        
+        if (isAdmin) {
+          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+        } else {
+          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+        }
+        
+        const querySnapshot = await getDocs(reportsQuery);
         const reports: TestReport[] = [];
         querySnapshot.forEach(reportDoc => {
           reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
         });
         setAllReports(reports);
-      }).catch(serverError => {
-        const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
-        const permissionError = new FirestorePermissionError({
-          operation: 'list',
-          path: path,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
+      } catch (error) {
+         console.error("Error fetching reports: ", error);
+      }
     };
 
     fetchReports();
