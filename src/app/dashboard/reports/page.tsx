@@ -6,8 +6,17 @@ import { collection, query, orderBy, getDocs, Query, DocumentData } from 'fireba
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
-// Helper function to check for admin role
-const isAdminUser = (user: any) => user && user.email === 'admin@example.gov';
+// Helper function to check for admin role using custom claims
+const isAdminUser = async (user: any): Promise<boolean> => {
+  if (!user) return false;
+  try {
+    const idTokenResult = await user.getIdTokenResult();
+    return idTokenResult.claims.admin === true;
+  } catch (error) {
+    console.error("Error getting user token claims:", error);
+    return false;
+  }
+};
 
 export default function ViewReportsPage() {
   const { firestore } = useFirebase();
@@ -23,9 +32,9 @@ export default function ViewReportsPage() {
     const fetchReports = async () => {
       let reports: TestReport[] = [];
       try {
-        let reportsQuery: Query<DocumentData>;
+        const isAdmin = await isAdminUser(user);
 
-        if (isAdminUser(user)) {
+        if (isAdmin) {
           // Admin user: fetch all users, then fetch reports for each user.
           const usersCollectionRef = collection(firestore, 'users');
           const usersSnapshot = await getDocs(usersCollectionRef).catch(error => {
@@ -52,7 +61,7 @@ export default function ViewReportsPage() {
 
         } else {
           // Regular user: Fetch only their own reports.
-          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+          const reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
           const reportsSnapshot = await getDocs(reportsQuery);
            reportsSnapshot.forEach(reportDoc => {
             reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
