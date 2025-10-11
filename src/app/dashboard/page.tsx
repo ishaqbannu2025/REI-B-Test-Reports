@@ -1,3 +1,4 @@
+
 'use client';
 
 import { StatCard } from './components/stat-card';
@@ -22,8 +23,8 @@ export default function DashboardPage() {
     const checkAdminStatus = async () => {
       const userDocRef = doc(firestore, 'users', user.uid);
       try {
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists() && userDoc.data().role === 'Admin') {
+        const idTokenResult = await user.getIdTokenResult();
+        if (idTokenResult.claims.role === 'Admin') {
           setIsAdmin(true);
         } else {
           setIsAdmin(false);

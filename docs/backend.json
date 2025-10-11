@@ -166,13 +166,11 @@
     "structure": {
       "/users/{userId}": {
         "schema": { "$ref": "#/entities/User" },
-        "description": "Stores user profile information. The 'userId' is the Firebase Auth UID.",
-        "collections": {
-          "/testReports/{reportId}": {
-            "schema": { "$ref": "#/entities/TestReport" },
-            "description": "Stores test reports created by a specific user."
-          }
-        }
+        "description": "Stores user profile information. The 'userId' is the Firebase Auth UID."
+      },
+      "/testReports/{reportId}": {
+        "schema": { "$ref": "#/entities/TestReport" },
+        "description": "This path is not directly used for writing, but represents the documents within the 'testReports' collection group."
       }
     },
     "collectionGroups": [
