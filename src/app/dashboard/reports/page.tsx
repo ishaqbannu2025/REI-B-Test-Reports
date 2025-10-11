@@ -27,9 +27,8 @@ export default function ViewReportsPage() {
         }
       } catch (e) {
         setIsAdmin(false);
-      } finally {
-        setIsLoading(false);
       }
+      setIsLoading(false);
     };
 
     checkAdminStatus();
@@ -57,7 +56,7 @@ export default function ViewReportsPage() {
                 setAllReports(reports);
             })
             .catch(serverError => {
-                const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
+                const path = isAdmin ? 'testReports' : `users/${user.uid}/testReports`;
                 const permissionError = new FirestorePermissionError({
                     operation: 'list',
                     path: path,

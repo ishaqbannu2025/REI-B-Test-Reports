@@ -20,7 +20,6 @@ export default function DashboardPage() {
     if (!firestore || !user) return;
 
     const checkAdminStatus = async () => {
-      setIsLoading(true);
       const userDocRef = doc(firestore, 'users', user.uid);
       try {
         const userDoc = await getDoc(userDocRef);
@@ -30,10 +29,10 @@ export default function DashboardPage() {
           setIsAdmin(false);
         }
       } catch (e) {
-        setIsAdmin(false);
-      } finally {
-        setIsLoading(false);
+        setIsAdmin(false); // Default to non-admin on error
       }
+      // We set loading to false here, so the next effect can run
+      setIsLoading(false);
     };
 
     checkAdminStatus();
@@ -41,14 +40,17 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
+    // This effect should wait until the admin check is complete
     if (isLoading || !firestore || !user) return;
 
     const fetchReports = () => {
       let reportsQuery;
       
       if (isAdmin) {
+        // Admin: Query all reports in the collection group
         reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
       } else {
+        // Non-Admin: Query only their own reports
         reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
       }
       
@@ -61,7 +63,7 @@ export default function DashboardPage() {
             setAllReports(reports);
         })
         .catch(serverError => {
-            const path = (reportsQuery as any)?._query?.path?.canonicalString() || `users/${user.uid}/testReports`;
+            const path = isAdmin ? 'testReports' : `users/${user.uid}/testReports`;
             const permissionError = new FirestorePermissionError({
               operation: 'list',
               path: path,
