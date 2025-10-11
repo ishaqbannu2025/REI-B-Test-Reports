@@ -86,24 +86,16 @@ export function AddUserDialog() {
 
     const userDocRef = doc(firestore, 'users', newUserId);
     
-    setDoc(userDocRef, userData, { merge: false })
-      .then(() => {
-        toast({
-            title: 'User Created (Simulated)',
-            description: `User ${values.name} has been added to the collection.`,
-        });
-        form.reset();
-        setIsOpen(false);
-      })
-      .catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: userDocRef.path,
-          operation: 'create',
-          requestResourceData: userData,
-        });
+    // Use the non-blocking firestore update with built-in error handling
+    setDocumentNonBlocking(userDocRef, userData, { merge: false });
 
-        errorEmitter.emit('permission-error', permissionError);
-      });
+    // Optimistically show success toast and close dialog
+    toast({
+      title: 'User Creation Sent',
+      description: `Request to create user ${values.name} has been sent.`,
+    });
+    form.reset();
+    setIsOpen(false);
   }
 
   return (
