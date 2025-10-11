@@ -63,7 +63,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="min-h-screen w-full bg-background text-foreground">
+      <div className="relative min-h-screen w-full bg-background text-foreground">
         <Sidebar className="border-r bg-card" collapsible="icon">
           <SidebarHeader className="p-4">
             <Link href="/dashboard" className={cn(
