@@ -14,6 +14,7 @@ export type TestReport = {
   proposedTransformer: string;
   governmentFee: number;
   challan: string;
+  challanDate: string;
   electricalContractorName: string;
   remarks: string;
   entryDate: Date | Timestamp;
