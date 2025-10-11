@@ -23,7 +23,6 @@ import {
   Users,
   Settings,
   LogOut,
-  Search,
 } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { Logo } from '@/components/logo';
@@ -31,17 +30,6 @@ import { UserNav } from '@/components/user-nav';
 import type { NavItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase';
-import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Button } from '@/components/ui/button';
-
 
 const navItems: NavItem[] = [
   { href: '/dashboard', title: 'Dashboard', icon: LayoutDashboard },
