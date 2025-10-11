@@ -68,7 +68,9 @@ export const columns: ColumnDef<TestReport>[] = [
     accessorKey: "entryDate",
     header: "Entry Date",
     cell: ({ row }) => {
-      const date = new Date(row.getValue("entryDate"))
+      const dateValue = row.getValue("entryDate");
+      // Firestore Timestamps can come in as objects, so we need to convert them.
+      const date = (dateValue as any).toDate ? (dateValue as any).toDate() : new Date(dateValue as string);
       return <div>{date.toLocaleDateString()}</div>
     },
   },
@@ -87,11 +89,11 @@ export const columns: ColumnDef<TestReport>[] = [
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <Link href={`/dashboard/reports/${report.id}`}>
-                <DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard/reports/${report.uin}`}>
                 View Details & Print
-                </DropdownMenuItem>
-            </Link>
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem>Edit Report</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive">Delete Report</DropdownMenuItem>
