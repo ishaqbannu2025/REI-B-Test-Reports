@@ -1,7 +1,7 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
@@ -22,24 +22,29 @@ export default function ViewReportsPage() {
 
     const fetchReports = async () => {
       setIsLoading(true);
-      // Simplified query: Fetch all reports for any authenticated user.
-      // The security rules will handle permissions.
       const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
       
-      const querySnapshot = await getDocs(reportsQuery);
-      const reports: TestReport[] = [];
-      querySnapshot.forEach(reportDoc => {
-          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-      });
-      setAllReports(reports);
-      setIsLoading(false);
+      try {
+        const querySnapshot = await getDocs(reportsQuery);
+        const reports: TestReport[] = [];
+        querySnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+        });
+        setAllReports(reports);
+        setIsLoading(false);
+      } catch (error) {
+        // Create a contextual error for the failed collection group query
+        const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: 'testReports (collection group)',
+        });
+        // Emit the error for the global listener
+        errorEmitter.emit('permission-error', contextualError);
+        setIsLoading(false);
+      }
     };
     
-    fetchReports().catch(error => {
-      // Directly log the actual error instead of hiding it.
-      console.error("FATAL: Failed to fetch reports:", error);
-      setIsLoading(false);
-    });
+    fetchReports();
 
   }, [user, firestore]);
 
