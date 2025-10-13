@@ -87,8 +87,6 @@ export default function LoginPage() {
         if (initialToken.claims.role !== 'Admin') {
             setProcessingMessage("Verifying Admin Role...");
             await setAdminClaim(firebaseUser.uid);
-            // CRITICAL: Force a refresh of the token on the client to get the new claim.
-            // This is the blocking step that ensures the role is present before proceeding.
             await firebaseUser.getIdToken(true); 
         }
     }
@@ -101,7 +99,6 @@ export default function LoginPage() {
     setIsProcessing(true);
     let userCredential;
 
-    // On a refresh, the user is already available from the hook.
     if(isRefresh && user) {
         userCredential = { user };
     } else {
@@ -129,11 +126,9 @@ export default function LoginPage() {
 
     try {
         setProcessingMessage("Finalizing setup...");
-        // Await the entire setup process. Navigation will not happen until this is done.
         if (userCredential?.user) {
             await handleUserSetup(userCredential.user);
             toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
-            // Signal that setup is complete, allowing the useEffect to navigate.
             setIsSetupComplete(true);
         }
     } catch(setupError: any) {
@@ -146,7 +141,6 @@ export default function LoginPage() {
     }
   };
   
-  // This state is for when the user is not logged in yet, and we're waiting for the hook to confirm that.
   if (isUserLoading || (user && !isSetupComplete)) {
       return (
         <div className="flex min-h-screen items-center justify-center">
@@ -156,7 +150,6 @@ export default function LoginPage() {
   }
   
   if (user && isSetupComplete) {
-      // The useEffect will handle the redirect, show a message while it happens.
       return <div className="flex min-h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
   }
 
