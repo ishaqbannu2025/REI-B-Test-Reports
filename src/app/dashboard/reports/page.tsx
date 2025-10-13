@@ -24,8 +24,8 @@ export default function ViewReportsPage() {
       setIsLoading(true);
       try {
         const idTokenResult = await user.getIdToken(true); // Force refresh to get latest claims
-        const claims = (idTokenResult as any).claims;
-        const isAdmin = claims.role === 'Admin';
+        const claims = idTokenResult.claims;
+        const isAdmin = claims?.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {

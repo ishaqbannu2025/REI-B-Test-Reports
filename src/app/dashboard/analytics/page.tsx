@@ -27,8 +27,8 @@ export default function AnalyticsPage() {
       setIsLoading(true);
       try {
         const idTokenResult = await user.getIdToken(true); // Force refresh
-        const claims = (idTokenResult as any).claims;
-        const isAdmin = claims.role === 'Admin';
+        const claims = idTokenResult.claims;
+        const isAdmin = claims?.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {

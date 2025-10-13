@@ -24,7 +24,7 @@ export default function UsersPage() {
       let isAdmin = false;
       try {
         const idTokenResult = await authUser.getIdTokenResult();
-        isAdmin = idTokenResult.claims.role === 'Admin';
+        isAdmin = idTokenResult.claims?.role === 'Admin';
         setIsAllowed(isAdmin);
       } catch (error) {
         console.error("Error checking admin status:", error);
