@@ -1,3 +1,4 @@
+
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
@@ -14,26 +15,21 @@ export default function ViewReportsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Ensure both user and firestore are available before proceeding.
       if (!user || !firestore) {
-        // If they are not ready yet, do nothing and wait for the next effect run.
-        setIsLoading(true); // Keep loading state
+        setIsLoading(true); 
         return;
       }
 
       setIsLoading(true);
       
       try {
-        // Force a refresh of the ID token to ensure we have the latest custom claims.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
-          // Admin: fetch all reports from the collection group
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
-          // Non-admin: fetch only their own reports
           reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
         }
         
@@ -48,7 +44,6 @@ export default function ViewReportsPage() {
 
       } catch (error) {
         console.error("Error fetching reports:", error);
-        // Create a contextual error for the failed collection group query
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'testReports (collection group)',
@@ -61,7 +56,7 @@ export default function ViewReportsPage() {
     
     fetchReports();
 
-  }, [user, firestore]); // This effect re-runs whenever the user or firestore instance changes.
+  }, [user, firestore]); 
 
 
   if (isLoading) {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -58,7 +59,6 @@ export default function LoginPage() {
         title: "Admin Setup Error",
         description: "Could not set admin privileges on the server.",
       });
-      // Re-throw to be caught by the caller
       throw error;
     }
   };
@@ -119,7 +119,6 @@ export default function LoginPage() {
       toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
       router.push('/dashboard');
     } catch (error: any) {
-      // If user not found, try creating a new account.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);

@@ -1,3 +1,4 @@
+
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
@@ -25,8 +26,6 @@ export default function UsersPage() {
         const idTokenResult = await authUser.getIdTokenResult(true);
         if (idTokenResult.claims.role !== 'Admin') {
             setIsAllowed(false);
-            // This is not a permissions error, but an authorization failure.
-            // We can handle it gracefully on the client.
             console.warn("User is not an admin. Access to users page denied.");
         } else {
             setIsAllowed(true);
@@ -49,7 +48,6 @@ export default function UsersPage() {
         }
       } catch (error) {
          setIsAllowed(false);
-         // This catch block would trigger if fetching the 'users' collection fails due to security rules.
          const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'users',

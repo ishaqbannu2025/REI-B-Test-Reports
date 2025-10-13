@@ -1,3 +1,4 @@
+
 'use client';
 
 import { StatCard } from '../components/stat-card';
@@ -17,24 +18,20 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Ensure both user and firestore are available before proceeding.
       if (!user || !firestore) {
-        setIsLoading(true); // Keep loading until services are ready
+        setIsLoading(true);
         return;
       }
       setIsLoading(true);
 
       try {
-        // Force a refresh of the ID token to get the latest custom claims.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
-          // Admin: fetch all reports from the collection group.
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
-          // Non-admin: fetch only their own reports.
           reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
         }
         
