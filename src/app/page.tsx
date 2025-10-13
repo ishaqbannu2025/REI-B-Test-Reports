@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -18,12 +17,12 @@ import { Logo } from '@/components/logo';
 import { useFirebase, useUser } from '@/firebase';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  signInWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,14 +43,14 @@ export default function LoginPage() {
     try {
       const response = await fetch('/api/set-admin-claim', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid }),
       });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to set admin claim.');
       }
-      console.log(`Admin claim set for UID: ${uid}`);
+      console.log(`Admin claim set request sent for UID: ${uid}`);
     } catch (error) {
       console.error("Error in setAdminClaim:", error);
       toast({
@@ -59,7 +58,7 @@ export default function LoginPage() {
         title: "Admin Setup Error",
         description: "Could not set admin privileges on the server.",
       });
-      throw error;
+      // We don't re-throw here to allow login flow to continue, but the user won't be an admin.
     }
   };
 
@@ -70,6 +69,10 @@ export default function LoginPage() {
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
     const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
   
+    // Always check claims on every login for consistency.
+    const idTokenResult = await firebaseUser.getIdTokenResult();
+    const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
+
     if (isNewUser) {
       const newUserProfile = {
         uid: firebaseUser.uid,
@@ -79,32 +82,21 @@ export default function LoginPage() {
         role: shouldBeAdmin ? 'Admin' : 'Data Entry User',
         createdAt: serverTimestamp(),
       };
-      
+      // Create the user document in Firestore.
       await setDoc(userDocRef, newUserProfile);
       console.log(`New user profile created for ${firebaseUser.uid}`);
+    }
 
-      if (shouldBeAdmin) {
-        console.log(`User is an admin, setting claim...`);
+    // If the user should be an admin but doesn't have the claim yet, set it.
+    if (shouldBeAdmin && !isAlreadyAdmin) {
+        console.log(`User ${firebaseUser.uid} requires admin claim. Setting now...`);
         await setAdminClaim(firebaseUser.uid);
         // CRITICAL: Force a refresh of the token to get the new claim immediately.
         await firebaseUser.getIdToken(true);
-        console.log("Token refreshed after setting admin claim.");
-      }
+        console.log("Token refreshed to apply new admin claim.");
     } else {
-        // For existing users, check if they SHOULD be admin but don't have the claim.
-        const idTokenResult = await firebaseUser.getIdTokenResult();
-        const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
-
-        if (shouldBeAdmin && !isAlreadyAdmin) {
-            console.log(`Existing user ${firebaseUser.uid} should be admin, setting claim...`);
-            await setAdminClaim(firebaseUser.uid);
-            // CRITICAL: Force a refresh of the token to get the new claim.
-            await firebaseUser.getIdToken(true);
-            console.log("Token refreshed for existing user to grant admin role.");
-        } else {
-            // Also force a refresh on regular login to ensure claims are up-to-date.
-             await firebaseUser.getIdToken(true);
-        }
+        // Even for regular logins, a silent refresh ensures claims are up-to-date.
+        await firebaseUser.getIdToken(true);
     }
   };
 
@@ -119,6 +111,7 @@ export default function LoginPage() {
       toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
       router.push('/dashboard');
     } catch (error: any) {
+      // If user doesn't exist, try creating a new account for them.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
