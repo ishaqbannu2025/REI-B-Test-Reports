@@ -47,7 +47,6 @@ export default function AnalyticsPage() {
             } as TestReport));
             setAllReports(userReports);
         } catch (userError) {
-             console.error("Error fetching reports for analytics:", userError);
              const contextualError = new FirestorePermissionError({
                operation: 'list',
                path: 'testReports (collection group)',
@@ -100,7 +99,8 @@ export default function AnalyticsPage() {
           icon={Home}
           description="Total domestic connections"
         />
-        <StatCard _title="Commercial & Industrial"
+        <StatCard 
+          title="Commercial & Industrial"
           value={commercialReports + industrialReports}
           icon={Building2}
           description="Total business connections"

@@ -22,9 +22,8 @@ export default function ViewReportsPage() {
 
       setIsLoading(true);
       try {
-        // For simplicity and to rely on security rules, we will always attempt the collectionGroup query.
-        // The rules will enforce that only admins can successfully execute this.
-        // Non-admins will get a permission error, which is expected and handled.
+        // We will always attempt the collectionGroup query.
+        // Security rules will determine if the user has permission.
         const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         
         const querySnapshot = await getDocs(reportsQuery);
@@ -37,9 +36,7 @@ export default function ViewReportsPage() {
         setAllReports(reports);
 
       } catch (error) {
-        console.error("Error fetching reports:", error);
-        // If the collection group query fails, it's likely a non-admin user.
-        // Let's try fetching just their own reports.
+        // If the admin query fails, assume it's a non-admin and fetch their own reports
         try {
             const userReportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
             const userQuerySnapshot = await getDocs(userReportsQuery);
@@ -49,10 +46,9 @@ export default function ViewReportsPage() {
             } as TestReport));
             setAllReports(userReports);
         } catch (userError) {
-             console.error("Error fetching user-specific reports:", userError);
              const contextualError = new FirestorePermissionError({
-                operation: 'list',
-                path: `users/${user.uid}/testReports`,
+               operation: 'list',
+               path: 'testReports (collection group)',
              });
              errorEmitter.emit('permission-error', contextualError);
         }
