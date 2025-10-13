@@ -11,14 +11,12 @@ import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 export default function AnalyticsPage() {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user } = useFirebase();
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Guard clause: Do not proceed if user or firestore are not ready.
       if (!user || !firestore) {
         setIsLoading(false);
         return;
@@ -26,18 +24,11 @@ export default function AnalyticsPage() {
 
       setIsLoading(true);
       try {
-        // Force a token refresh to get the latest custom claims.
-        const idTokenResult = await user.getIdTokenResult(true); 
-        const isAdmin = idTokenResult.claims?.role === 'Admin';
-        
-        let reportsQuery;
-        if (isAdmin) {
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-          reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
-        }
-
+        // We will always attempt the collectionGroup query.
+        // Security rules will determine if the user has permission.
+        const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         const querySnapshot = await getDocs(reportsQuery);
+        
         const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
           id: reportDoc.id,
           ...reportDoc.data()
@@ -46,13 +37,23 @@ export default function AnalyticsPage() {
         setAllReports(reports);
 
       } catch (error) {
-        console.error("Error fetching reports for analytics:", error);
-         // Create a contextual error for the failed collection group query
-         const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: 'testReports (collection group)',
-        });
-        errorEmitter.emit('permission-error', contextualError);
+        // If the admin query fails, assume it's a non-admin and fetch their own reports
+        try {
+            const userReportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
+            const userQuerySnapshot = await getDocs(userReportsQuery);
+            const userReports: TestReport[] = userQuerySnapshot.docs.map(reportDoc => ({
+                id: reportDoc.id,
+                ...reportDoc.data()
+            } as TestReport));
+            setAllReports(userReports);
+        } catch (userError) {
+             console.error("Error fetching reports for analytics:", userError);
+             const contextualError = new FirestorePermissionError({
+               operation: 'list',
+               path: 'testReports (collection group)',
+             });
+             errorEmitter.emit('permission-error', contextualError);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -99,8 +100,7 @@ export default function AnalyticsPage() {
           icon={Home}
           description="Total domestic connections"
         />
-        <StatCard 
-          title="Commercial & Industrial"
+        <StatCard _title="Commercial & Industrial"
           value={commercialReports + industrialReports}
           icon={Building2}
           description="Total business connections"

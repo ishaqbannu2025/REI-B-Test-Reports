@@ -15,30 +15,13 @@ export default function UsersPage() {
 
   useEffect(() => {
 
-    const checkAdminAndFetchData = async () => {
+    const fetchData = async () => {
       if (!authUser || !firestore) {
         setIsLoading(false);
         return;
       }
       
       setIsLoading(true);
-      let isAdmin = false;
-      try {
-        const idTokenResult = await authUser.getIdTokenResult(true);
-        isAdmin = idTokenResult.claims?.role === 'Admin';
-        setIsAllowed(isAdmin);
-      } catch (error) {
-        console.error("Error checking admin status:", error);
-        setIsAllowed(false);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!isAdmin) {
-        setUsers([]);
-        setIsLoading(false);
-        return;
-      }
 
       const usersCollectionRef = collection(firestore, 'users');
       const q = query(usersCollectionRef);
@@ -57,7 +40,9 @@ export default function UsersPage() {
             } as UserProfile;
           });
           setUsers(fetchedUsers);
+          setIsAllowed(true); // If getDocs succeeds, the user has permission
       } catch (error) {
+         setIsAllowed(false);
          const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: usersCollectionRef.path,
@@ -68,7 +53,7 @@ export default function UsersPage() {
       }
     };
 
-    checkAdminAndFetchData();
+    fetchData();
 
   }, [authUser, firestore]);
 

@@ -14,30 +14,21 @@ export default function ViewReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // This function will be called whenever the user or firestore instance changes.
     const fetchReports = async () => {
-      // Guard clause: Do not proceed if user or firestore are not ready.
       if (!user || !firestore) {
-          setIsLoading(false);
+        setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       try {
-        // Force a token refresh to get the latest custom claims.
-        const idTokenResult = await user.getIdTokenResult(true);
-        const isAdmin = idTokenResult.claims?.role === 'Admin';
+        // For simplicity and to rely on security rules, we will always attempt the collectionGroup query.
+        // The rules will enforce that only admins can successfully execute this.
+        // Non-admins will get a permission error, which is expected and handled.
+        const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         
-        let reportsQuery;
-        if (isAdmin) {
-          // Admin gets all reports from the collection group
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-          // Regular user gets only their own reports
-          reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
-        }
-
         const querySnapshot = await getDocs(reportsQuery);
+        
         const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
           id: reportDoc.id,
           ...reportDoc.data()
@@ -47,12 +38,24 @@ export default function ViewReportsPage() {
 
       } catch (error) {
         console.error("Error fetching reports:", error);
-         // Create a contextual error for the failed collection group query
-         const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: 'testReports (collection group)',
-        });
-        errorEmitter.emit('permission-error', contextualError);
+        // If the collection group query fails, it's likely a non-admin user.
+        // Let's try fetching just their own reports.
+        try {
+            const userReportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
+            const userQuerySnapshot = await getDocs(userReportsQuery);
+            const userReports: TestReport[] = userQuerySnapshot.docs.map(reportDoc => ({
+                id: reportDoc.id,
+                ...reportDoc.data()
+            } as TestReport));
+            setAllReports(userReports);
+        } catch (userError) {
+             console.error("Error fetching user-specific reports:", userError);
+             const contextualError = new FirestorePermissionError({
+                operation: 'list',
+                path: `users/${user.uid}/testReports`,
+             });
+             errorEmitter.emit('permission-error', contextualError);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -60,7 +63,7 @@ export default function ViewReportsPage() {
     
     fetchReports();
 
-  }, [user, firestore]); // Dependency array ensures this runs when user or firestore are resolved.
+  }, [user, firestore]);
 
 
   if (isLoading) {
