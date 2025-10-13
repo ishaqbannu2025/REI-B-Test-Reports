@@ -35,18 +35,20 @@ export default function LoginPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingMessage, setProcessingMessage] = useState('Please wait...');
   const [isSetupComplete, setIsSetupComplete] = useState(false);
-  
+
+  // This effect will run when the user is authenticated and the setup is complete.
   useEffect(() => {
-    // If the user is loaded, and setup is complete, navigate to dashboard
     if (user && !isUserLoading && isSetupComplete) {
       router.push('/dashboard');
     }
-    // If user is already logged in (e.g. page refresh), kick off setup process
-    else if (user && !isUserLoading && !isProcessing) {
-       handleLogin(undefined, true); // Pass a flag to indicate it's a refresh
-    }
-  }, [user, isUserLoading, isSetupComplete, router, isProcessing]);
+  }, [user, isUserLoading, isSetupComplete, router]);
 
+  // This effect handles the case where a user is already logged in (e.g., page refresh).
+  useEffect(() => {
+    if (user && !isUserLoading && !isProcessing) {
+      handleLogin(undefined, true); // Trigger the setup process for an existing session.
+    }
+  }, [user, isUserLoading]);
 
   const setAdminClaim = async (uid: string): Promise<void> => {
     const response = await fetch('/api/set-admin-claim', {
@@ -67,6 +69,7 @@ export default function LoginPage() {
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
     const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
     
+    setProcessingMessage("Checking user profile...");
     const userDoc = await getDoc(userDocRef);
     
     if (!userDoc.exists()) {
@@ -83,34 +86,40 @@ export default function LoginPage() {
     }
   
     if (shouldBeAdmin) {
+        setProcessingMessage("Verifying Admin Role...");
+        // This forces a refresh of the token to get the latest claims.
         const initialToken = await firebaseUser.getIdTokenResult();
+        // Only set the claim if it's not already present.
         if (initialToken.claims.role !== 'Admin') {
-            setProcessingMessage("Verifying Admin Role...");
+            setProcessingMessage("Setting Admin Role...");
             await setAdminClaim(firebaseUser.uid);
+            // CRITICAL: Force refresh the token *after* setting the claim.
             await firebaseUser.getIdToken(true); 
+            setProcessingMessage("Admin Role Confirmed.");
         }
     }
   };
   
   const handleLogin = async (e?: React.FormEvent, isRefresh: boolean = false) => {
     if (e) e.preventDefault();
-    if (!auth) return;
-    
-    setIsProcessing(true);
-    let userCredential;
+    // If it's a manual login attempt, ensure we are not already processing.
+    if (!isRefresh && isProcessing) return;
 
-    if(isRefresh && user) {
-        userCredential = { user };
-    } else {
+    setIsProcessing(true);
+    let currentUser: FirebaseUser | null = user;
+
+    if (!isRefresh) {
         setProcessingMessage('Logging in...');
         try {
-          userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          currentUser = userCredential.user;
         } catch (error: any) {
           if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
             try {
               toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
               setProcessingMessage('Creating Account...');
-              userCredential = await createUserWithEmailAndPassword(auth, email, password);
+              const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+              currentUser = userCredential.user;
             } catch (createError: any) {
               toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
               setIsProcessing(false);
@@ -124,23 +133,30 @@ export default function LoginPage() {
         }
     }
 
-    try {
-        setProcessingMessage("Finalizing setup...");
-        if (userCredential?.user) {
-            await handleUserSetup(userCredential.user);
-            toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
+    if (currentUser) {
+        try {
+            setProcessingMessage("Finalizing setup...");
+            // Await the entire setup process, including token refresh.
+            await handleUserSetup(currentUser);
+            // Only set setup complete after all async operations in handleUserSetup are done.
             setIsSetupComplete(true);
+            toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
+        } catch(setupError: any) {
+            toast({
+              variant: "destructive",
+              title: "Setup Error",
+              description: setupError.message,
+            });
+            setIsProcessing(false); // Stop processing on error.
         }
-    } catch(setupError: any) {
-        toast({
-          variant: "destructive",
-          title: "Setup Error",
-          description: setupError.message,
-        });
+    } else {
+        // This case handles a page load where the user isn't logged in yet.
         setIsProcessing(false);
     }
   };
   
+  // This is the primary loading/blocking UI.
+  // It shows when the user is being loaded OR when they are logged in but setup is not yet complete.
   if (isUserLoading || (user && !isSetupComplete)) {
       return (
         <div className="flex min-h-screen items-center justify-center">
@@ -149,10 +165,12 @@ export default function LoginPage() {
       )
   }
   
+  // This state is hit when a user is logged in, and setup is complete, just before the useEffect redirects them.
   if (user && isSetupComplete) {
       return <div className="flex min-h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
   }
 
+  // This is the default state: user is not logged in.
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
       <div className="flex items-center justify-center py-12">

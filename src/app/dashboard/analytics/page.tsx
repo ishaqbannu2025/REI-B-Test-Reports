@@ -24,13 +24,16 @@ export default function AnalyticsPage() {
       setIsLoading(true);
 
       try {
+        // Force refresh the token to get the latest claims.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
+          // If admin, query all reports across all users.
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
+          // If not admin, query only reports for the current user.
           reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
         }
         
