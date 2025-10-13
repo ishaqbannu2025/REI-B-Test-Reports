@@ -4,7 +4,7 @@ import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
 import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
 
 export default function UsersPage() {
   const { firestore } = useFirebase();
@@ -14,16 +14,17 @@ export default function UsersPage() {
   const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
-    if (!authUser || !firestore) {
-      setIsLoading(false);
-      return;
-    }
 
     const checkAdminAndFetchData = async () => {
+      if (!authUser || !firestore) {
+        setIsLoading(false);
+        return;
+      }
+      
       setIsLoading(true);
       let isAdmin = false;
       try {
-        const idTokenResult = await authUser.getIdTokenResult();
+        const idTokenResult = await authUser.getIdTokenResult(true);
         isAdmin = idTokenResult.claims?.role === 'Admin';
         setIsAllowed(isAdmin);
       } catch (error) {
@@ -42,30 +43,29 @@ export default function UsersPage() {
       const usersCollectionRef = collection(firestore, 'users');
       const q = query(usersCollectionRef);
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedUsers = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            uid: doc.id,
-            displayName: data.displayName || data.email,
-            email: data.email,
-            role: data.role || 'Data Entry User',
-            photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
-          } as UserProfile;
-        });
-        setUsers(fetchedUsers);
-        setIsLoading(false);
-      }, (error) => {
-        const contextualError = new FirestorePermissionError({
+      try {
+        const querySnapshot = await getDocs(q);
+        const fetchedUsers = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              uid: doc.id,
+              displayName: data.displayName || data.email,
+              email: data.email,
+              role: data.role || 'Data Entry User',
+              photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
+            } as UserProfile;
+          });
+          setUsers(fetchedUsers);
+      } catch (error) {
+         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: usersCollectionRef.path,
         });
         errorEmitter.emit('permission-error', contextualError);
+      } finally {
         setIsLoading(false);
-      });
-
-      return () => unsubscribe();
+      }
     };
 
     checkAdminAndFetchData();

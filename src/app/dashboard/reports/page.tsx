@@ -18,10 +18,7 @@ export default function ViewReportsPage() {
     const fetchReports = async () => {
       // Guard clause: Do not proceed if user or firestore are not ready.
       if (!user || !firestore) {
-        // If the user object is explicitly null (not just loading), we can stop loading.
-        if (typeof user !== 'undefined') {
           setIsLoading(false);
-        }
         return;
       }
 

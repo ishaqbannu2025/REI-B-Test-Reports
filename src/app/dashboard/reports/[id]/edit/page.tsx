@@ -27,18 +27,20 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
-import { useFirebase, useUser, updateDocumentNonBlocking, FirestorePermissionError, errorEmitter } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import {
   collectionGroup,
   query,
   where,
   getDocs,
   doc,
+  updateDoc,
 } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { notFound, useParams, useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
+import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 const formSchema = z.object({
   uin: z.string().min(1, 'UIN is required.'),
@@ -70,15 +72,14 @@ export default function EditReportPage() {
   });
 
    useEffect(() => {
-    if (!firestore || typeof uin !== 'string' || !user) {
-      if(!user && firestore) setIsLoading(false); // Not logged in
+    if (!firestore || typeof uin !== 'string') {
+      setIsLoading(false);
       return;
     }
 
     const findReport = async () => {
       setIsLoading(true);
       try {
-        // Admins and users who created the report can edit, so we query the collection group.
         const reportsRef = collectionGroup(firestore, 'testReports');
         const q = query(reportsRef, where('uin', '==', uin));
         
@@ -88,7 +89,6 @@ export default function EditReportPage() {
           const reportData = { ...(doc.data() as TestReport), id: doc.id };
           setReport(reportData);
 
-          // Handle challanDate which could be a string, Date, or Firestore Timestamp
           const challanDate = reportData.challanDate;
           let formattedChallanDate = '';
           if (challanDate) {
@@ -98,10 +98,8 @@ export default function EditReportPage() {
               formattedChallanDate = format(challanDate, 'yyyy-MM-dd');
             } else if (typeof challanDate === 'string') {
               try {
-                 // Attempt to parse string dates, common format is ISO string
                 formattedChallanDate = format(parseISO(challanDate), 'yyyy-MM-dd');
               } catch {
-                // If parsing fails, it might be in 'yyyy-MM-dd' already
                 formattedChallanDate = challanDate;
               }
             }
@@ -140,7 +138,6 @@ export default function EditReportPage() {
       return;
     }
     
-    // The path requires the original creator's UID (`enteredBy`) and the report's actual document ID.
     const reportRef = doc(firestore, 'users', report.enteredBy, 'testReports', report.id);
     
     const updateData = {
@@ -148,13 +145,26 @@ export default function EditReportPage() {
         challanDate: values.challanDate ? new Date(values.challanDate) : new Date()
     };
     
-    updateDocumentNonBlocking(reportRef, updateData);
-
-    toast({
-      title: 'Report Updated',
-      description: `Report with UIN ${values.uin} has been successfully updated.`,
-    });
-    router.push('/dashboard/reports');
+    try {
+        await updateDoc(reportRef, updateData);
+        toast({
+          title: 'Report Updated',
+          description: `Report with UIN ${values.uin} has been successfully updated.`,
+        });
+        router.push('/dashboard/reports');
+    } catch(error) {
+        const contextualError = new FirestorePermissionError({
+          operation: 'update',
+          path: reportRef.path,
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', contextualError);
+        toast({
+          variant: "destructive",
+          title: "Update Failed",
+          description: "You don't have permission to edit this report.",
+        });
+    }
   }
 
   if (isLoading) {
