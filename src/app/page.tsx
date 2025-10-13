@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -34,30 +33,26 @@ export default function LoginPage() {
   const [email, setEmail] = useState('m.ishaqbannu@gmail.com');
   const [password, setPassword] = useState('Innovation123');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isSetupComplete, setIsSetupComplete] = useState(false);
-
+  const [processingMessage, setProcessingMessage] = useState('Please wait...');
+  
+  // This effect will run when the user object is available after a successful login.
+  // It redirects a fully authenticated and set-up user to the dashboard.
   useEffect(() => {
-    // Only redirect when the entire user setup process is confirmed to be complete.
-    if (isSetupComplete && user) {
+    if (user && !isUserLoading) {
       router.push('/dashboard');
     }
-  }, [isSetupComplete, user, router]);
+  }, [user, isUserLoading, router]);
+
 
   const setAdminClaim = async (uid: string): Promise<void> => {
-    try {
-        const response = await fetch('/api/set-admin-claim', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to set admin claim on the server.');
-        }
-        console.log(`Admin claim set request sent for UID: ${uid}`);
-    } catch (error) {
-        console.error("Error in setAdminClaim:", error);
-        throw error; // Re-throw to be caught by the calling function
+    const response = await fetch('/api/set-admin-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to set admin claim on the server.');
     }
   };
   
@@ -70,6 +65,7 @@ export default function LoginPage() {
     
     const userDoc = await getDoc(userDocRef);
     
+    // Create user profile in Firestore if it doesn't exist
     if (!userDoc.exists()) {
       const newUserProfile = {
         uid: firebaseUser.uid,
@@ -80,21 +76,21 @@ export default function LoginPage() {
         createdAt: serverTimestamp(),
       };
       await setDoc(userDocRef, newUserProfile);
-      console.log(`New user profile created for ${firebaseUser.uid}`);
     }
   
+    // If the user should be an admin, ensure the claim is set and the token is refreshed.
     if (shouldBeAdmin) {
-      const initialToken = await firebaseUser.getIdTokenResult();
-      if (initialToken.claims.role !== 'Admin') {
-        console.log(`User ${firebaseUser.uid} requires 'Admin' claim. Setting now...`);
-        // 1. Call the server-side function and wait for it to complete.
-        await setAdminClaim(firebaseUser.uid);
-        // 2. CRITICAL: Force a refresh of the token to get the new claim immediately and wait for it.
-        await firebaseUser.getIdToken(true);
-        console.log("Token refreshed to apply new 'Admin' claim on the client.");
-      }
+        const initialToken = await firebaseUser.getIdTokenResult();
+        // Only set the claim if it's not already present.
+        if (initialToken.claims.role !== 'Admin') {
+            setProcessingMessage("Verifying Admin Role..."); // Update UI message
+            await setAdminClaim(firebaseUser.uid);
+            
+            // CRITICAL: Force a refresh of the token on the client to get the new claim.
+            // This ensures subsequent requests and security rules see the 'Admin' role.
+            await firebaseUser.getIdToken(true); 
+        }
     }
-    // This promise resolves only after all setup, including claim setting and token refresh, is complete.
   };
   
 
@@ -103,17 +99,19 @@ export default function LoginPage() {
     if (!auth) return;
     
     setIsProcessing(true);
+    setProcessingMessage('Logging in...');
     
     let userCredential;
 
     try {
-      // First, try to sign in
+      // First, try to sign in.
       userCredential = await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
+      // If sign-in fails because the user doesn't exist, create a new account.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        // If sign-in fails because the user doesn't exist, create a new account
         try {
-          toast({ title: "Creating Account", description: "This may take a moment..." });
+          toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
+          setProcessingMessage('Creating Account...');
           userCredential = await createUserWithEmailAndPassword(auth, email, password);
         } catch (createError: any) {
           toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
@@ -121,19 +119,19 @@ export default function LoginPage() {
           return;
         }
       } else {
-        // Handle other login errors
+        // Handle other login errors (e.g., network issues).
         toast({ variant: "destructive", title: "Login Error", description: error.message });
         setIsProcessing(false);
         return;
       }
     }
 
-    // Now that we have a user, run the setup process and wait for it to complete.
+    // After a successful login/signup, run the setup process.
     try {
         toast({ title: "Login Successful", description: "Finalizing setup..." });
         await handleUserSetup(userCredential.user);
-        // Only set setup to complete after everything, including claims, is done.
-        setIsSetupComplete(true);
+        // The useEffect hook will handle the redirect once the user state is updated.
+        // No need to manually redirect here.
     } catch(setupError: any) {
         toast({
           variant: "destructive",
@@ -141,25 +139,21 @@ export default function LoginPage() {
           description: setupError.message,
         });
     } finally {
-        // We no longer set isProcessing to false here, as the useEffect will handle the redirect.
-        // If the setup fails, the user remains on the login page but can try again.
+        // After setup is complete (or has failed), allow the user to try again if needed.
         setIsProcessing(false);
     }
   };
   
-  // This state is for the initial auth check on page load, not for the login process itself.
-  if (isUserLoading) {
+  if (isUserLoading && !user) {
       return (
         <div className="flex min-h-screen items-center justify-center">
-          <p>Loading...</p>
+          <p>Loading Authentication...</p>
         </div>
       )
   }
-
-  // If a user is already logged in, but the setup process hasn't been confirmed as complete,
-  // we redirect them to the dashboard, which will then handle the data fetching correctly.
+  
+  // While the user is logged in but the page is transitioning, show nothing to avoid flicker.
   if(user && !isUserLoading) {
-    router.push('/dashboard');
     return null;
   }
 
@@ -201,7 +195,7 @@ export default function LoginPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={isProcessing}>
-              {isProcessing ? 'Please wait...' : 'Login or Sign Up'}
+              {isProcessing ? processingMessage : 'Login or Sign Up'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">

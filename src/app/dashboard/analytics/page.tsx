@@ -18,14 +18,12 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Wait until both user and firestore are available.
       if (!user || !firestore) {
         return;
       }
       setIsLoading(true);
 
       try {
-        // Get the user's ID token result to check for custom claims.
         // Force refresh to get the latest claims.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
