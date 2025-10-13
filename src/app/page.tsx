@@ -41,11 +41,23 @@ export default function LoginPage() {
 
   const setAdminClaim = async (uid: string) => {
     // This function will call our API route to set a custom claim.
-    await fetch('/api/set-admin-claim', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ uid }),
-    });
+    try {
+      const response = await fetch('/api/set-admin-claim', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ uid }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to set admin claim.');
+      }
+    } catch (error) {
+      console.error("Error in setAdminClaim:", error);
+      toast({
+        variant: "destructive",
+        title: "Admin Setup Error",
+        description: "Could not set admin privileges.",
+      });
+    }
   };
 
   const handleUserSetup = async (firebaseUser: FirebaseUser, isNewUser: boolean) => {
@@ -53,11 +65,10 @@ export default function LoginPage() {
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     let shouldSetAdminClaim = false;
+    const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
+    const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
   
     if (isNewUser) {
-      const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-      const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
-  
       const newUserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -81,6 +92,9 @@ export default function LoginPage() {
          if (idTokenResult.claims.role !== 'Admin') {
             shouldSetAdminClaim = true;
          }
+      } else if (isInitialAdmin) {
+        // Edge case: user exists but isn't marked as admin in Firestore, but should be.
+        shouldSetAdminClaim = true;
       }
     }
   

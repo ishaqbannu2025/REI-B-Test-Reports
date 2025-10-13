@@ -5,6 +5,7 @@ import { useFirebase, useUser } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
+import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 export default function ViewReportsPage() {
   const { firestore } = useFirebase();
@@ -23,9 +24,8 @@ export default function ViewReportsPage() {
     const fetchReports = async () => {
       setIsLoading(true);
       try {
-        const idTokenResult = await user.getIdToken(true); // Force refresh to get latest claims
-        const claims = idTokenResult.claims;
-        const isAdmin = claims?.role === 'Admin';
+        const idTokenResult = await user.getIdTokenResult(true); // Force refresh to get latest claims
+        const isAdmin = idTokenResult.claims?.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
@@ -46,7 +46,12 @@ export default function ViewReportsPage() {
 
       } catch (error) {
         console.error("Error fetching reports:", error);
-        // Optionally set an error state to show in the UI
+         // Create a contextual error for the failed collection group query
+         const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: 'testReports (collection group)',
+        });
+        errorEmitter.emit('permission-error', contextualError);
       } finally {
         setIsLoading(false);
       }

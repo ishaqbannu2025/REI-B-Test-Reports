@@ -8,6 +8,7 @@ import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser } from '@/firebase';
 import { query, orderBy, getDocs, collectionGroup, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
+import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 export default function AnalyticsPage() {
   const { firestore } = useFirebase();
@@ -17,7 +18,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!user || !firestore) {
-      if(typeof user !== 'undefined') { // if user is explicitly null (not loading)
+      if (typeof user !== 'undefined') { // if user is explicitly null (not loading)
         setIsLoading(false);
       }
       return;
@@ -26,9 +27,8 @@ export default function AnalyticsPage() {
     const fetchReports = async () => {
       setIsLoading(true);
       try {
-        const idTokenResult = await user.getIdToken(true); // Force refresh
-        const claims = idTokenResult.claims;
-        const isAdmin = claims?.role === 'Admin';
+        const idTokenResult = await user.getIdTokenResult(true); // Force refresh
+        const isAdmin = idTokenResult.claims?.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
@@ -47,7 +47,12 @@ export default function AnalyticsPage() {
 
       } catch (error) {
         console.error("Error fetching reports for analytics:", error);
-        // In a real app, you'd want to show a user-friendly error message
+         // Create a contextual error for the failed collection group query
+         const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: 'testReports (collection group)',
+        });
+        errorEmitter.emit('permission-error', contextualError);
       } finally {
         setIsLoading(false);
       }
@@ -62,7 +67,7 @@ export default function AnalyticsPage() {
   }
 
   const totalReports = allReports.length;
-  const totalFees = allReports.reduce((acc, report) => acc + report.governmentFee, 0);
+  const totalFees = allReports.reduce((acc, report) => acc + (report.governmentFee || 0), 0);
   const domesticReports = allReports.filter(r => r.category === 'Domestic').length;
   const commercialReports = allReports.filter(r => r.category === 'Commercial').length;
   const industrialReports = allReports.filter(r => r.category === 'Industrial').length;

@@ -27,18 +27,18 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
-import { useFirebase, useUser, updateDocumentNonBlocking, FirestorePermissionError } from '@/firebase';
+import { useFirebase, useUser, updateDocumentNonBlocking, FirestorePermissionError, errorEmitter } from '@/firebase';
 import {
-  collection,
+  collectionGroup,
   query,
   where,
   getDocs,
   doc,
-  collectionGroup,
 } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { Timestamp } from 'firebase/firestore';
 
 const formSchema = z.object({
   uin: z.string().min(1, 'UIN is required.'),
@@ -57,8 +57,7 @@ const formSchema = z.object({
 
 export default function EditReportPage() {
   const { toast } = useToast();
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user } = useFirebase();
   const params = useParams();
   const router = useRouter();
   const { id: uin } = params; // This is the UIN
@@ -70,36 +69,49 @@ export default function EditReportPage() {
   });
 
    useEffect(() => {
-    if (!firestore || typeof uin !== 'string') return;
+    if (!firestore || typeof uin !== 'string' || !user) {
+      if(!user && firestore) setIsLoading(false); // Not logged in
+      return;
+    }
 
     const findReport = async () => {
       setIsLoading(true);
-      const reportsRef = collectionGroup(firestore, 'testReports');
-      const q = query(reportsRef, where('uin', '==', uin));
-      
       try {
+        const reportsRef = collectionGroup(firestore, 'testReports');
+        const q = query(reportsRef, where('uin', '==', uin));
+        
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
           const doc = querySnapshot.docs[0];
           const reportData = { ...(doc.data() as TestReport), id: doc.id };
           setReport(reportData);
 
-          // Format challanDate which might be a Firestore Timestamp
+          // Handle challanDate which could be a string, Date, or Firestore Timestamp
           const challanDate = reportData.challanDate;
-          const formattedChallanDate = challanDate instanceof Date 
-            ? format(challanDate, 'yyyy-MM-dd')
-            : (typeof challanDate === 'string' ? challanDate.split('T')[0] : '');
+          let formattedChallanDate = '';
+          if (challanDate) {
+            if (challanDate instanceof Timestamp) {
+              formattedChallanDate = format(challanDate.toDate(), 'yyyy-MM-dd');
+            } else if (challanDate instanceof Date) {
+              formattedChallanDate = format(challanDate, 'yyyy-MM-dd');
+            } else if (typeof challanDate === 'string') {
+              // Attempt to parse string dates, common format is ISO string
+              formattedChallanDate = format(parseISO(challanDate), 'yyyy-MM-dd');
+            }
+          }
 
           form.reset({
             ...reportData,
             challanDate: formattedChallanDate,
             remarks: reportData.remarks || '',
+            governmentFee: reportData.governmentFee || 0,
           });
 
         } else {
           setReport(null);
         }
       } catch (error) {
+        console.error("Error fetching report for editing:", error);
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: `testReports where uin == ${uin}`,
@@ -112,7 +124,7 @@ export default function EditReportPage() {
     };
 
     findReport();
-  }, [firestore, uin, form]);
+  }, [firestore, uin, form, user]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!firestore || !user || !report) {
@@ -120,11 +132,17 @@ export default function EditReportPage() {
       return;
     }
     
-    // The document ID is the UIN, and we need the original `enteredBy` to build the path.
+    // The document ID might be the UIN, but the original `id` from the doc is safer.
+    // The path requires the original creator's UID (`enteredBy`).
     const reportRef = doc(firestore, 'users', report.enteredBy, 'testReports', report.id);
     
-    // We only update the values from the form, leaving metadata like entryDate untouched.
-    updateDocumentNonBlocking(reportRef, values);
+    // We only update the values from the form, leaving metadata like entryDate and enteredBy untouched.
+    const updateData = {
+        ...values,
+        challanDate: values.challanDate ? new Date(values.challanDate) : new Date()
+    };
+    
+    updateDocumentNonBlocking(reportRef, updateData);
 
     toast({
       title: 'Report Updated',
@@ -230,7 +248,7 @@ export default function EditReportPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a category" />
@@ -268,7 +286,7 @@ export default function EditReportPage() {
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                         className="flex items-center space-x-4"
                       >
                         <FormItem className="flex items-center space-x-2 space-y-0">
