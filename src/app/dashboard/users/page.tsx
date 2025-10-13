@@ -25,7 +25,6 @@ export default function UsersPage() {
         const idTokenResult = await authUser.getIdTokenResult(true);
         if (idTokenResult.claims.role !== 'Admin') {
             setIsAllowed(false);
-            console.warn("User is not an admin. Access to users page denied.");
             const contextualError = new FirestorePermissionError({
               operation: 'list',
               path: 'users',

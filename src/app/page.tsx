@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -31,7 +30,7 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [email, setEmail] = useState('admin@example.gov');
+  const [email, setEmail] = useState('m.ishaqbannu@gmail.com');
   const [password, setPassword] = useState('Innovation123');
 
   useEffect(() => {
