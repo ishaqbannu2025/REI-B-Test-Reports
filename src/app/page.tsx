@@ -40,7 +40,6 @@ export default function LoginPage() {
   }, [user, isUserLoading, router]);
 
   const setAdminClaim = async (uid: string) => {
-    // This function will call our API route to set a custom claim.
     try {
       const response = await fetch('/api/set-admin-claim', {
         method: 'POST',
@@ -64,7 +63,6 @@ export default function LoginPage() {
     if (!firestore) return;
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    let shouldSetAdminClaim = false;
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
     const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
   
@@ -81,28 +79,21 @@ export default function LoginPage() {
       await setDoc(userDocRef, newUserProfile);
 
       if (isInitialAdmin) {
-        shouldSetAdminClaim = true;
+        await setAdminClaim(firebaseUser.uid);
+        await firebaseUser.getIdToken(true); // Force refresh
       }
 
     } else {
       // For existing users, check if they should be admin but don't have the claim yet.
       const userDoc = await getDoc(userDocRef);
-      if (userDoc.exists() && userDoc.data().role === 'Admin') {
-         const idTokenResult = await firebaseUser.getIdTokenResult();
-         if (idTokenResult.claims.role !== 'Admin') {
-            shouldSetAdminClaim = true;
-         }
-      } else if (isInitialAdmin) {
-        // Edge case: user exists but isn't marked as admin in Firestore, but should be.
-        shouldSetAdminClaim = true;
+      // Force a token refresh to get the latest claims from the server.
+      const idTokenResult = await firebaseUser.getIdTokenResult(true);
+
+      if (isInitialAdmin && idTokenResult.claims.role !== 'Admin') {
+        // This user is in the admin list but doesn't have the claim yet.
+        await setAdminClaim(firebaseUser.uid);
+        await firebaseUser.getIdToken(true); // Force a second refresh
       }
-    }
-  
-    // If an admin claim needs to be set (for new or existing user)
-    if (shouldSetAdminClaim) {
-      await setAdminClaim(firebaseUser.uid);
-      // CRITICAL: Force a refresh of the token to get the new claim immediately.
-      await firebaseUser.getIdToken(true);
     }
   };
 
