@@ -22,16 +22,23 @@ export default function ViewReportsPage() {
 
     const fetchReports = async () => {
       setIsLoading(true);
-      const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-      
+      let reportsQuery;
       try {
+        const idTokenResult = await user.getIdTokenResult();
+        const isAdmin = idTokenResult.claims.role === 'Admin';
+        
+        if (isAdmin) {
+          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+        } else {
+          reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
+        }
+
         const querySnapshot = await getDocs(reportsQuery);
         const reports: TestReport[] = [];
         querySnapshot.forEach(reportDoc => {
             reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
         });
         setAllReports(reports);
-        setIsLoading(false);
       } catch (error) {
         // Create a contextual error for the failed collection group query
         const contextualError = new FirestorePermissionError({
@@ -40,6 +47,7 @@ export default function ViewReportsPage() {
         });
         // Emit the error for the global listener
         errorEmitter.emit('permission-error', contextualError);
+      } finally {
         setIsLoading(false);
       }
     };

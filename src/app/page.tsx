@@ -50,16 +50,18 @@ export default function LoginPage() {
 
   const handleUserSetup = async (firebaseUser: FirebaseUser) => {
     if (!firestore) return;
-
+  
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    
+  
     try {
       const userDoc = await getDoc(userDocRef);
-
-      if (!userDoc.exists()) {
+      let shouldSetAdminClaim = false;
+      let isNewUser = !userDoc.exists();
+  
+      if (isNewUser) {
         const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
         const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
-
+  
         const newUserProfile = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -67,43 +69,46 @@ export default function LoginPage() {
           photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
           role: isInitialAdmin ? 'Admin' : 'Data Entry User',
         };
-
-        await setDoc(userDocRef, newUserProfile)
-          .catch(error => {
-            const contextualError = new FirestorePermissionError({
-              operation: 'create',
-              path: userDocRef.path,
-              requestResourceData: newUserProfile,
-            });
-            errorEmitter.emit('permission-error', contextualError);
-            throw contextualError;
+  
+        await setDoc(userDocRef, newUserProfile).catch(error => {
+          const contextualError = new FirestorePermissionError({
+            operation: 'create',
+            path: userDocRef.path,
+            requestResourceData: newUserProfile,
           });
-
+          errorEmitter.emit('permission-error', contextualError);
+          throw contextualError;
+        });
+  
         if (isInitialAdmin) {
-            await setAdminClaim(firebaseUser.uid);
-             // Force refresh the token to get the new claim. CRITICAL for rules to work immediately.
-            await firebaseUser.getIdToken(true);
+          shouldSetAdminClaim = true;
         }
       } else {
-        // If user exists, check their token. If they don't have the admin claim but should, set it.
+        // Existing user. Check if they should be an admin but don't have the claim.
         const idTokenResult = await firebaseUser.getIdTokenResult();
         const userData = userDoc.data();
-        if (userData.role === 'Admin' && !idTokenResult.claims.role) {
-          await setAdminClaim(firebaseUser.uid);
-          // Force refresh the token to get the new claim.
-          await firebaseUser.getIdToken(true);
+        if (userData.role === 'Admin' && idTokenResult.claims.role !== 'Admin') {
+          shouldSetAdminClaim = true;
         }
       }
+  
+      // If an admin claim needs to be set (for new or existing user)
+      if (shouldSetAdminClaim) {
+        await setAdminClaim(firebaseUser.uid);
+        // CRITICAL: Force a refresh of the token to get the new claim immediately.
+        await firebaseUser.getIdToken(true);
+      }
+  
     } catch(error) {
-       if (error instanceof FirestorePermissionError) {
-         throw error;
-       }
-       const contextualError = new FirestorePermissionError({
-         operation: 'get',
-         path: userDocRef.path,
-       });
-       errorEmitter.emit('permission-error', contextualError);
-       throw contextualError;
+      if (error instanceof FirestorePermissionError) {
+        throw error;
+      }
+      const contextualError = new FirestorePermissionError({
+        operation: 'get',
+        path: userDocRef.path,
+      });
+      errorEmitter.emit('permission-error', contextualError);
+      throw contextualError;
     }
   };
 
