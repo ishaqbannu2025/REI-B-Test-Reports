@@ -16,7 +16,7 @@ export default function ViewReportsPage() {
   useEffect(() => {
     const fetchReports = async () => {
       if (!user || !firestore) {
-        setIsLoading(true); 
+        setIsLoading(true);
         return;
       }
 
@@ -43,7 +43,6 @@ export default function ViewReportsPage() {
         setAllReports(reports);
 
       } catch (error) {
-        console.error("Error fetching reports:", error);
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'testReports (collection group)',

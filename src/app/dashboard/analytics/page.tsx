@@ -45,7 +45,6 @@ export default function AnalyticsPage() {
         setAllReports(reports);
 
       } catch (error) {
-        console.error("Error fetching reports for analytics:", error);
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'testReports (collection group)',
