@@ -4,16 +4,16 @@ import {initializeApp, getApp, App, getApps} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {credential} from 'firebase-admin';
 
-// This is the standard pattern for initializing the Firebase Admin SDK in a serverless environment.
-// It ensures that the app is initialized only once per function instance.
+// This function ensures that the Firebase Admin app is initialized only once.
 function getAdminApp(): App {
+  // Check if there are any initialized apps. If so, return the default one.
   if (getApps().length > 0) {
     return getApp();
   }
   
+  // If no app is initialized, initialize one with Application Default Credentials.
+  // This is the standard and recommended way for server-side environments like App Hosting.
   return initializeApp({
-    // Use Application Default Credentials which are automatically
-    // available in the App Hosting environment.
     credential: credential.applicationDefault(),
   });
 }
@@ -26,16 +26,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({error: 'UID is required'}, {status: 400});
     }
 
+    // Get the initialized Admin App.
     const app = getAdminApp();
 
-    // Set custom user claims on the server.
+    // Use the app to get the Auth service and set the custom claim.
     await getAuth(app).setCustomUserClaims(uid, {role: 'Admin'});
 
     return NextResponse.json({message: `Success! Custom claim set for ${uid}`});
   } catch (error: any) {
-    console.error('Error setting custom claim:', error);
-    // Ensure a proper error message is sent back
-    const errorMessage = error.message || 'An unknown error occurred while setting the admin claim.';
+    // Log the detailed error on the server for debugging.
+    console.error('Error in set-admin-claim API route:', error);
+    
+    // Send a generic but helpful error message back to the client.
+    const errorMessage = error.message || 'An unknown error occurred on the server.';
     return NextResponse.json({error: errorMessage}, {status: 500});
   }
 }
