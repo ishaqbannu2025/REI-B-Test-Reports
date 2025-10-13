@@ -4,35 +4,29 @@ import {initializeApp, getApp, App, deleteApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {credential} from 'firebase-admin';
 
-// Initialize the Firebase Admin SDK
-async function getAdminApp(): Promise<App> {
-    try {
-        // This will throw if the app doesn't exist.
-        return getApp('admin');
-    } catch (e) {
-        // If the app doesn't exist, initialize it.
-        return initializeApp(
-          {
-            // Use Application Default Credentials
-            credential: credential.applicationDefault(),
-          },
-          'admin'
-        );
-    }
+let adminApp: App;
+
+// Initialize the Firebase Admin SDK only once.
+if (!getApps().some(app => app.name === 'admin')) {
+  adminApp = initializeApp(
+    {
+      // Use Application Default Credentials
+      credential: credential.applicationDefault(),
+    },
+    'admin'
+  );
+} else {
+  adminApp = getApp('admin');
 }
 
 
 export async function POST(req: NextRequest) {
-  let adminApp;
   try {
     const {uid} = await req.json();
     
     if (!uid) {
       return NextResponse.json({error: 'UID is required'}, {status: 400});
     }
-
-    // Get (or initialize) the admin app instance
-    adminApp = await getAdminApp();
 
     // Set custom user claims on the server.
     await getAuth(adminApp).setCustomUserClaims(uid, {role: 'Admin'});
