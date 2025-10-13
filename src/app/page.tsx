@@ -45,7 +45,7 @@ export default function LoginPage() {
     else if (user && !isUserLoading && !isProcessing) {
        handleLogin(undefined, true); // Pass a flag to indicate it's a refresh
     }
-  }, [user, isUserLoading, isSetupComplete, router]);
+  }, [user, isUserLoading, isSetupComplete, router, isProcessing]);
 
 
   const setAdminClaim = async (uid: string): Promise<void> => {
