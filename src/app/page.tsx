@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -22,7 +22,7 @@ import {
   createUserWithEmailAndPassword,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,67 +48,47 @@ export default function LoginPage() {
     });
   };
 
-  const handleUserSetup = async (firebaseUser: FirebaseUser) => {
+  const handleUserSetup = async (firebaseUser: FirebaseUser, isNewUser: boolean) => {
     if (!firestore) return;
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+    let shouldSetAdminClaim = false;
   
-    try {
+    if (isNewUser) {
+      const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
+      const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
+  
+      const newUserProfile = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+        photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
+        role: isInitialAdmin ? 'Admin' : 'Data Entry User',
+        createdAt: serverTimestamp(),
+      };
+      
+      await setDoc(userDocRef, newUserProfile);
+
+      if (isInitialAdmin) {
+        shouldSetAdminClaim = true;
+      }
+
+    } else {
+      // For existing users, check if they should be admin but don't have the claim yet.
       const userDoc = await getDoc(userDocRef);
-      let shouldSetAdminClaim = false;
-      let isNewUser = !userDoc.exists();
-  
-      if (isNewUser) {
-        const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-        const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
-  
-        const newUserProfile = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
-          photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
-          role: isInitialAdmin ? 'Admin' : 'Data Entry User',
-        };
-  
-        await setDoc(userDocRef, newUserProfile).catch(error => {
-          const contextualError = new FirestorePermissionError({
-            operation: 'create',
-            path: userDocRef.path,
-            requestResourceData: newUserProfile,
-          });
-          errorEmitter.emit('permission-error', contextualError);
-          throw contextualError;
-        });
-  
-        if (isInitialAdmin) {
-          shouldSetAdminClaim = true;
-        }
-      } else {
-        // Existing user. Check if they should be an admin but don't have the claim.
-        const idTokenResult = await firebaseUser.getIdTokenResult();
-        const userData = userDoc.data();
-        if (userData.role === 'Admin' && idTokenResult.claims.role !== 'Admin') {
-          shouldSetAdminClaim = true;
-        }
+      if (userDoc.exists() && userDoc.data().role === 'Admin') {
+         const idTokenResult = await firebaseUser.getIdTokenResult();
+         if (idTokenResult.claims.role !== 'Admin') {
+            shouldSetAdminClaim = true;
+         }
       }
+    }
   
-      // If an admin claim needs to be set (for new or existing user)
-      if (shouldSetAdminClaim) {
-        await setAdminClaim(firebaseUser.uid);
-        // CRITICAL: Force a refresh of the token to get the new claim immediately.
-        await firebaseUser.getIdToken(true);
-      }
-  
-    } catch(error) {
-      if (error instanceof FirestorePermissionError) {
-        throw error;
-      }
-      const contextualError = new FirestorePermissionError({
-        operation: 'get',
-        path: userDocRef.path,
-      });
-      errorEmitter.emit('permission-error', contextualError);
-      throw contextualError;
+    // If an admin claim needs to be set (for new or existing user)
+    if (shouldSetAdminClaim) {
+      await setAdminClaim(firebaseUser.uid);
+      // CRITICAL: Force a refresh of the token to get the new claim immediately.
+      await firebaseUser.getIdToken(true);
     }
   };
 
@@ -118,20 +98,16 @@ export default function LoginPage() {
     
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      await handleUserSetup(userCredential.user);
+      await handleUserSetup(userCredential.user, false);
+      router.push('/dashboard');
     } catch (error: any) {
-      if (error instanceof FirestorePermissionError) {
-        return;
-      }
-
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        // User doesn't exist, so create a new account
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
-          await handleUserSetup(newUserCredential.user);
+          await handleUserSetup(newUserCredential.user, true);
+          router.push('/dashboard');
         } catch (createError: any) {
-          if (createError instanceof FirestorePermissionError) {
-            return;
-          }
           toast({
             variant: "destructive",
             title: "Sign-Up Error",
@@ -192,7 +168,7 @@ export default function LoginPage() {
               />
             </div>
             <Button type="submit" className="w-full">
-              Login
+              Login or Sign Up
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">

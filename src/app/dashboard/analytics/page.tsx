@@ -5,7 +5,7 @@ import { CategoryChart } from '../components/category-chart';
 import { RecentReports } from '../components/recent-reports';
 import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { query, orderBy, getDocs, collectionGroup, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
@@ -17,7 +17,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!user || !firestore) {
-      if (typeof user !== 'undefined') {
+      if(typeof user !== 'undefined') { // if user is explicitly null (not loading)
         setIsLoading(false);
       }
       return;
@@ -25,12 +25,12 @@ export default function AnalyticsPage() {
 
     const fetchReports = async () => {
       setIsLoading(true);
-      let reportsQuery;
-      
       try {
-        const idTokenResult = await user.getIdTokenResult();
-        const isAdmin = idTokenResult.claims.role === 'Admin';
+        const idTokenResult = await user.getIdToken(true); // Force refresh
+        const claims = (idTokenResult as any).claims;
+        const isAdmin = claims.role === 'Admin';
         
+        let reportsQuery;
         if (isAdmin) {
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
@@ -38,20 +38,16 @@ export default function AnalyticsPage() {
         }
 
         const querySnapshot = await getDocs(reportsQuery);
-        const reports: TestReport[] = [];
-        querySnapshot.forEach(reportDoc => {
-            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
-        setAllReports(reports);
+        const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
+          id: reportDoc.id,
+          ...reportDoc.data()
+        } as TestReport));
         
+        setAllReports(reports);
+
       } catch (error) {
-        // Create a contextual error for the failed collection group query
-        const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: 'testReports (collection group)',
-        });
-        // Emit the error for the global listener
-        errorEmitter.emit('permission-error', contextualError);
+        console.error("Error fetching reports for analytics:", error);
+        // In a real app, you'd want to show a user-friendly error message
       } finally {
         setIsLoading(false);
       }
