@@ -7,7 +7,7 @@ import {credential} from 'firebase-admin';
 // This is the standard pattern for initializing the Firebase Admin SDK in a serverless environment.
 // It ensures that the app is initialized only once per function instance.
 function getAdminApp(): App {
-  if (getApps().length) {
+  if (getApps().length > 0) {
     return getApp();
   }
   
