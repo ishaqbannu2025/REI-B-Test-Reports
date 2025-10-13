@@ -3,10 +3,10 @@
 import { StatCard } from '../components/stat-card';
 import { CategoryChart } from '../components/category-chart';
 import { RecentReports } from '../components/recent-reports';
-import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
+import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
+import { useFirebase, useUser } from '@/firebase';
+import { query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 export default function AnalyticsPage() {
@@ -25,37 +25,24 @@ export default function AnalyticsPage() {
 
     const fetchReports = async () => {
       setIsLoading(true);
-      try {
-        const idTokenResult = await user.getIdTokenResult();
-        const isAdmin = idTokenResult.claims.role === 'Admin';
-        
-        let reportsQuery;
-        if (isAdmin) {
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-        }
-        
-        const querySnapshot = await getDocs(reportsQuery);
-        const reports: TestReport[] = [];
-        querySnapshot.forEach(reportDoc => {
-            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-        });
-        setAllReports(reports);
-
-      } catch (serverError: any) {
-          const path = `testReports collection group`;
-          const permissionError = new FirestorePermissionError({
-            operation: 'list',
-            path: path,
-          });
-          errorEmitter.emit('permission-error', permissionError);
-      } finally {
-        setIsLoading(false);
-      }
+      // Simplified query: Fetch all reports for any authenticated user.
+      // The security rules will handle permissions.
+      const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+      
+      const querySnapshot = await getDocs(reportsQuery);
+      const reports: TestReport[] = [];
+      querySnapshot.forEach(reportDoc => {
+          reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
+      });
+      setAllReports(reports);
+      setIsLoading(false);
     };
     
-    fetchReports();
+    fetchReports().catch(error => {
+      // Directly log the actual error instead of hiding it.
+      console.error("FATAL: Failed to fetch analytics data:", error);
+      setIsLoading(false);
+    });
 
   }, [user, firestore]);
   
