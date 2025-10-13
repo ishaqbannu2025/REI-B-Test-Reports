@@ -17,11 +17,11 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!user || !firestore) {
-      if(typeof user !== 'undefined') {
+      if (typeof user !== 'undefined') {
         setIsLoading(false);
       }
       return;
-    };
+    }
 
     const fetchReports = async () => {
       setIsLoading(true);

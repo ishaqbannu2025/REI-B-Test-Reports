@@ -1,11 +1,10 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
 import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, onSnapshot, query, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 
 export default function UsersPage() {
   const { firestore } = useFirebase();
@@ -13,68 +12,65 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
-  const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
 
   useEffect(() => {
-    if (!authUser || !firestore) return;
+    if (!authUser || !firestore) {
+      setIsLoading(false);
+      return;
+    }
 
-    const checkAdminStatus = async () => {
-        try {
-            const idTokenResult = await authUser.getIdTokenResult();
-            setIsAllowed(idTokenResult.claims.role === 'Admin');
-        } catch (error) {
-            console.error("Error checking admin status:", error);
-            setIsAllowed(false);
-        } finally {
-            setAuthCheckCompleted(true);
-        }
-    };
-
-    checkAdminStatus();
-  }, [authUser, firestore]);
-
-  useEffect(() => {
-    if (!authCheckCompleted || !firestore) {
+    const checkAdminAndFetchData = async () => {
+      setIsLoading(true);
+      let isAdmin = false;
+      try {
+        const idTokenResult = await authUser.getIdTokenResult();
+        isAdmin = idTokenResult.claims.role === 'Admin';
+        setIsAllowed(isAdmin);
+      } catch (error) {
+        console.error("Error checking admin status:", error);
+        setIsAllowed(false);
         setIsLoading(false);
         return;
-    };
-    
-    if(!isAllowed) {
+      }
+
+      if (!isAdmin) {
         setUsers([]);
         setIsLoading(false);
         return;
-    }
+      }
 
-    setIsLoading(true);
-    const usersCollectionRef = collection(firestore, 'users');
-    const q = query(usersCollectionRef);
+      const usersCollectionRef = collection(firestore, 'users');
+      const q = query(usersCollectionRef);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedUsers = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          uid: doc.id,
-          displayName: data.displayName || data.email,
-          email: data.email,
-          role: data.role || 'Data Entry User',
-          photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
-        }
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const fetchedUsers = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            uid: doc.id,
+            displayName: data.displayName || data.email,
+            email: data.email,
+            role: data.role || 'Data Entry User',
+            photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
+          } as UserProfile;
+        });
+        setUsers(fetchedUsers);
+        setIsLoading(false);
+      }, (error) => {
+        const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: usersCollectionRef.path,
+        });
+        errorEmitter.emit('permission-error', contextualError);
+        setIsLoading(false);
       });
-      setUsers(fetchedUsers as UserProfile[]);
-      setIsLoading(false);
-    }, (error) => {
-      const contextualError = new FirestorePermissionError({
-        operation: 'list',
-        path: usersCollectionRef.path,
-      });
-      errorEmitter.emit('permission-error', contextualError);
-      setIsLoading(false);
-    });
 
-    return () => unsubscribe();
-  }, [firestore, isAllowed, authCheckCompleted]);
+      return () => unsubscribe();
+    };
 
+    checkAdminAndFetchData();
+
+  }, [authUser, firestore]);
 
   if (isLoading) {
     return <div>Loading user data...</div>;
