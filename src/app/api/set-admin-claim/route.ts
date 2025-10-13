@@ -4,26 +4,19 @@ import {initializeApp, getApp, App, getApps} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {credential} from 'firebase-admin';
 
-// Keep a cached instance of the admin app.
-let adminApp: App;
-
-/**
- * Initializes the Firebase Admin SDK, reusing the app instance if it already exists.
- * This is the standard pattern for serverless environments like Next.js API routes.
- */
+// This is the standard pattern for initializing the Firebase Admin SDK in a serverless environment.
+// It ensures that the app is initialized only once per function instance.
 function getAdminApp(): App {
-  if (getApps().length > 0) {
+  if (getApps().length) {
     return getApp();
   }
   
-  // Use Application Default Credentials which are automatically
-  // available in the App Hosting environment.
-  adminApp = initializeApp({
+  return initializeApp({
+    // Use Application Default Credentials which are automatically
+    // available in the App Hosting environment.
     credential: credential.applicationDefault(),
   });
-  return adminApp;
 }
-
 
 export async function POST(req: NextRequest) {
   try {
