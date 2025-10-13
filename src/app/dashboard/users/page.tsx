@@ -1,4 +1,3 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
@@ -27,6 +26,11 @@ export default function UsersPage() {
         if (idTokenResult.claims.role !== 'Admin') {
             setIsAllowed(false);
             console.warn("User is not an admin. Access to users page denied.");
+            const contextualError = new FirestorePermissionError({
+              operation: 'list',
+              path: 'users',
+            });
+            errorEmitter.emit('permission-error', contextualError);
         } else {
             setIsAllowed(true);
             const usersCollectionRef = collection(firestore, 'users');

@@ -58,7 +58,6 @@ export default function LoginPage() {
         title: "Admin Setup Error",
         description: "Could not set admin privileges on the server.",
       });
-      // We don't re-throw here to allow login flow to continue, but the user won't be an admin.
     }
   };
 
@@ -69,10 +68,6 @@ export default function LoginPage() {
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
     const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
   
-    // Always check claims on every login for consistency.
-    const idTokenResult = await firebaseUser.getIdTokenResult();
-    const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
-
     if (isNewUser) {
       const newUserProfile = {
         uid: firebaseUser.uid,
@@ -82,21 +77,22 @@ export default function LoginPage() {
         role: shouldBeAdmin ? 'Admin' : 'Data Entry User',
         createdAt: serverTimestamp(),
       };
-      // Create the user document in Firestore.
       await setDoc(userDocRef, newUserProfile);
       console.log(`New user profile created for ${firebaseUser.uid}`);
     }
 
-    // If the user should be an admin but doesn't have the claim yet, set it.
-    if (shouldBeAdmin && !isAlreadyAdmin) {
+    if (shouldBeAdmin) {
+      // Get current claims
+      const idTokenResult = await firebaseUser.getIdTokenResult();
+      const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
+      
+      if (!isAlreadyAdmin) {
         console.log(`User ${firebaseUser.uid} requires admin claim. Setting now...`);
         await setAdminClaim(firebaseUser.uid);
         // CRITICAL: Force a refresh of the token to get the new claim immediately.
         await firebaseUser.getIdToken(true);
         console.log("Token refreshed to apply new admin claim.");
-    } else {
-        // Even for regular logins, a silent refresh ensures claims are up-to-date.
-        await firebaseUser.getIdToken(true);
+      }
     }
   };
 

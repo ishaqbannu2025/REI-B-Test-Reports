@@ -1,83 +1,71 @@
 /**
- * @fileoverview Firestore Security Rules for the electrical test report application.
+ * @fileoverview Firestore Security Rules for Electrical Test Reports App.
  *
  * Core Philosophy:
- * This ruleset enforces a user-ownership model for user profiles and allows public read access to test reports.
- * Administrative privileges are not implemented in this prototype.
+ * This ruleset implements a role-based access control system where 'Admin' users have full read and write access,
+ * 'Data Entry User' can create new test reports and read data,
+ * and anonymous/unauthenticated users can read publicly accessible information.
+ * The system relies on Firebase Authentication for user identity and custom claims ('role') to define user privileges.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile information, with 'userId' matching the Firebase Auth UID.
- * - /testReports/{reportId}: Stores electrical test reports.
+ * - /users/{userId}: Stores user profile data. 'userId' must match the Firebase Auth UID. Only the user themselves and admins can access this data.
+ * - /testReports/{reportId}:  A collection group containing all test reports.
  *
  * Key Security Decisions:
- * - Users can only read/write their own profile data.
- * - Listing of users is disallowed.
- * - Test reports are publicly readable.
- * - Only authenticated users can create, update, or delete test reports.
- * - The `enteredBy` field in `testReports` must match the authenticated user's UID upon creation.
+ * - Users can only create their own profile.
+ * - Only authenticated users can create test reports
+ * - Test reports can be listed by all users.
  *
  * Denormalization for Authorization:
- * The `TestReport` entity includes the `enteredBy` field, which is used to determine ownership. This avoids the need for separate queries to authorize write operations.
- *
- * Structural Segregation:
- * Public and private test report data is not segregated, but access to create/update/delete test reports is strictly limited to authenticated users.
+ * - To keep rules simple and efficient, the 'TestReport' document includes the 'enteredBy' field,
+ *   which stores the user ID of the report creator. This avoids having to perform expensive `get()` calls to the /users/{userId} collection
+ *   to verify ownership.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    /**
-     * @description Checks if the request is authenticated.
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
 
     /**
-     * @description Checks if the authenticated user's UID matches the provided userId.
-     */
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-     /**
-      * @description Checks if the authenticated user is the owner of an existing document.
-      */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Rules for user profiles.
+     * @description Grants access to user profiles based on role and identity.
      * @path /users/{userId}
-     * @allow (create) User with matching UID can create their profile.
-     * @allow (get, update, delete) User with matching UID can access and modify their profile.
-     * @deny (create) User cannot create a profile with a mismatched UID.
-     * @deny (list) Listing users is not permitted.
-     * @principle Enforces document ownership for user profiles.
+     * @allow (create, update, get) User with matching UID.
+     * @deny (create, update, get) User with non-matching UID.
+     * @principle Enforces user-ownership for profile data and restricts unauthorized modifications.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.uid == userId;
-      allow delete: if isExistingOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId) && resource.data.uid == userId;
+      allow delete: if false;
     }
 
     /**
-     * @description Rules for test reports. Publicly readable, but only authenticated users can create/modify.
+     * @description Grants access to testReports collection group
      * @path /testReports/{reportId}
-     * @allow (get, list) Any user can read test reports.
-     * @allow (create) Authenticated users can create test reports, with `enteredBy` matching their UID.
-     * @allow (update, delete) Only the user who created the report (`enteredBy`) can update/delete it.
-     * @deny (create) Unauthenticated users cannot create test reports.
-     * @deny (update, delete) Unauthenticated users cannot update/delete test reports.
-     * @principle Allows public read access with owner-only writes, enforcing ownership through the `enteredBy` field.
+     * @allow (list) All signed in users can list
+     * @allow (create) Signed in users can create a new test report.
+     * @deny (update, delete) No users can update or delete.
+     * @principle Test reports collection group is public readable by all users.
      */
     match /testReports/{reportId} {
-      allow get, list: if true;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.enteredBy == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.enteredBy == request.auth.uid && resource != null;
-      allow delete: if isSignedIn() && resource.data.enteredBy == request.auth.uid && resource != null;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }

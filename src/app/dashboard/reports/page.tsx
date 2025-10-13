@@ -1,4 +1,3 @@
-
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
@@ -20,7 +19,6 @@ export default function ViewReportsPage() {
         setIsLoading(true);
         return;
       }
-
       setIsLoading(true);
       
       try {
