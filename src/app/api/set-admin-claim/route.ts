@@ -6,7 +6,7 @@ import {credential} from 'firebase-admin';
 
 // This function ensures that the Firebase Admin app is initialized only once.
 function getAdminApp(): App {
-  // If there are already initialized apps, return the default one.
+  // If the default app already exists, return it.
   if (getApps().length > 0) {
     return getApp();
   }
@@ -20,22 +20,22 @@ function getAdminApp(): App {
 
 export async function POST(req: NextRequest) {
   try {
-    // Get the initialized Admin App instance *before* doing anything else.
-    const app = getAdminApp();
-
     const {uid} = await req.json();
     
     if (!uid) {
       return NextResponse.json({error: 'UID is required'}, {status: 400});
     }
 
+    // Get the initialized Admin App instance *before* using any admin services.
+    const adminApp = getAdminApp();
+
     // Use the app instance to get the Auth service and set the custom claim.
-    await getAuth(app).setCustomUserClaims(uid, {role: 'Admin'});
+    await getAuth(adminApp).setCustomUserClaims(uid, {role: 'Admin'});
 
     return NextResponse.json({message: `Success! Custom claim set for ${uid}`});
   } catch (error: any) {
     // Log the detailed error on the server for debugging.
-    console.error('Error in set-admin-claim API route:', error);
+    console.error('Error in set-admin-claim API route:', error, error.stack);
     
     // Send a generic but helpful error message back to the client.
     const errorMessage = error.message || 'An unknown error occurred on the server.';
