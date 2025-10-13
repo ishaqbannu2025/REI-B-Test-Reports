@@ -6,9 +6,10 @@ import {credential} from 'firebase-admin';
 
 // This function ensures that the Firebase Admin app is initialized only once.
 function getAdminApp(): App {
-  // If there are no initialized apps, initialize one.
+  // If the array of initialized apps is empty, initialize a new one.
   if (getApps().length === 0) {
     // This is the standard and recommended way for server-side environments like App Hosting.
+    // It automatically uses the service account credentials from the environment.
     return initializeApp({
       credential: credential.applicationDefault(),
     });
