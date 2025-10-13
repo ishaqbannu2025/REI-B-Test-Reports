@@ -1,22 +1,25 @@
 
 import {NextRequest, NextResponse} from 'next/server';
-import {initializeApp, getApp, App, deleteApp} from 'firebase-admin/app';
+import {initializeApp, getApp, App, getApps} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {credential} from 'firebase-admin';
 
-let adminApp: App;
-
-// Initialize the Firebase Admin SDK only once.
-if (!getApps().some(app => app.name === 'admin')) {
-  adminApp = initializeApp(
+// Helper function to initialize and get the admin app instance.
+function getAdminApp(): App {
+  // Check if the 'admin' app is already initialized.
+  const adminApp = getApps().find(app => app.name === 'admin');
+  if (adminApp) {
+    return adminApp;
+  }
+  // If not initialized, create a new 'admin' app instance.
+  return initializeApp(
     {
-      // Use Application Default Credentials
+      // Use Application Default Credentials which are automatically
+      // available in the App Hosting environment.
       credential: credential.applicationDefault(),
     },
-    'admin'
+    'admin' // Name the app 'admin' to avoid conflicts.
   );
-} else {
-  adminApp = getApp('admin');
 }
 
 
@@ -27,6 +30,8 @@ export async function POST(req: NextRequest) {
     if (!uid) {
       return NextResponse.json({error: 'UID is required'}, {status: 400});
     }
+
+    const adminApp = getAdminApp();
 
     // Set custom user claims on the server.
     await getAuth(adminApp).setCustomUserClaims(uid, {role: 'Admin'});
