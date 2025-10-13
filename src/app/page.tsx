@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -153,6 +154,13 @@ export default function LoginPage() {
           <p>Loading...</p>
         </div>
       )
+  }
+
+  // If a user is already logged in, but the setup process hasn't been confirmed as complete,
+  // we redirect them to the dashboard, which will then handle the data fetching correctly.
+  if(user && !isUserLoading) {
+    router.push('/dashboard');
+    return null;
   }
 
   return (

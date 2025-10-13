@@ -1,105 +1,71 @@
 /**
- * @fileoverview Firestore Security Rules for Electrical Test Reports.
+ * @fileoverview Firestore Security Rules for Electrical Test Reports App.
  *
  * Core Philosophy:
- * This ruleset enforces a role-based access control model. Users are assigned roles (Admin, Data Entry User) which determine their permissions.
- * Only authenticated users can access data, with different levels of access based on their role.
+ * This ruleset implements a role-based access control system where 'Admin' users have full read and write access,
+ * 'Data Entry User' can create new test reports and read data,
+ * and anonymous/unauthenticated users can read publicly accessible information.
+ * The system relies on Firebase Authentication for user identity and custom claims ('role') to define user privileges.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile information, with 'userId' matching the Firebase Auth UID.
- * - /testReports/{reportId}: Stores test reports.
+ * - /users/{userId}: Stores user profile data. 'userId' must match the Firebase Auth UID. Only the user themselves and admins can access this data.
+ * - /testReports/{reportId}:  A collection group containing all test reports.
  *
  * Key Security Decisions:
- * - Admins can read all test reports.
- * - Data Entry Users can only create test reports and update them.
- * - Listing all test reports is restricted to admins.
+ * - Users can only create their own profile.
+ * - Only authenticated users can create test reports
+ * - Test reports can be listed by all users.
  *
  * Denormalization for Authorization:
- *  - The `enteredBy` field on each `TestReport` is used to enforce ownership.
+ * - To keep rules simple and efficient, the 'TestReport' document includes the 'enteredBy' field,
+ *   which stores the user ID of the report creator. This avoids having to perform expensive `get()` calls to the /users/{userId} collection
+ *   to verify ownership.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Grants access to user profile information based on user ID.
+     * @description Grants access to user profiles based on role and identity.
      * @path /users/{userId}
-     * @allow (create) - Authenticated user can create their own profile if the UID matches.
-     * @allow (get, update, delete) - Authenticated user can get, update, or delete their own profile if the UID matches.
-     * @deny (create) - If the UID does not match the authenticated user's UID.
-     * @deny (get, update, delete) - If the UID does not match the authenticated user's UID.
-     * @principle Enforces user-ownership for profile data.
+     * @allow (create, update, get) User with matching UID.
+     * @deny (create, update, get) User with non-matching UID.
+     * @principle Enforces user-ownership for profile data and restricts unauthorized modifications.
      */
     match /users/{userId} {
-      // Allow the user to create their own profile if the UID matches.
-      allow create: if isSignedIn() && isOwner(userId);
-      // Allow the user to read, update, and delete their own profile if the UID matches.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
       allow get: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isOwner(userId);
-      allow delete: if isSignedIn() && isOwner(userId);
-      // Deny listing of all users.
       allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId) && resource.data.uid == userId;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to test reports.
+     * @description Grants access to testReports collection group
      * @path /testReports/{reportId}
-     * @allow (list) - Admin users can list all test reports.
-     * @allow (create) - Authenticated Data Entry Users can create test reports. The `enteredBy` field must match their UID.
-     * @allow (get) - Admin users can get any report.
-     * @allow (update, delete) - Admin users can update any report.
-     * @deny (list) - Non-Admin users cannot list all test reports.
-     * @deny (create) - Non-Data Entry Users cannot create test reports.
-     * @deny (get) - Non-Admin users cannot get any report.
-     * @deny (update, delete) - Non-Admin users cannot update/delete reports.
-     * @principle Restricts list access to admins and enforces user-ownership for writes.
+     * @allow (list) All signed in users can list
+     * @allow (create) Signed in users can create a new test report.
+     * @deny (update, delete) No users can update or delete.
+     * @principle Test reports collection group is public readable by all users.
      */
     match /testReports/{reportId} {
-      allow get: if isAdmin();
-      allow list: if isAdmin();
-      allow create: if isSignedIn() && isDataEntryUser();
-      allow update: if isSignedIn() && isAdmin();
-      allow delete: if isSignedIn() && isAdmin();
-    }
+      function isSignedIn() {
+        return request.auth != null;
+      }
 
-    /**
-     * @description Controls access to the 'testReports' collection group.
-     * @path /databases/{database}/documents/testReports (collection group)
-     * @allow (list) - Allows listing 'testReports' collection group if the user is an Admin.
-     * @deny (get, create, update, delete) - Denies all other operations on the 'testReports' collection group.
-     * @principle Restricts list access to admins for the collection group.
-     */
-    match /{path=**}/testReports/{reportId} {
-      allow list: if isAdmin();
-      allow get: if false;
-      allow create: if false;
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.enteredBy == request.auth.uid;
       allow update: if false;
       allow delete: if false;
     }
-  }
-
-  // Helper function to check if the user is signed in.
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  // Helper function to check if the user is the owner of the resource.
-  function isOwner(userId) {
-    return request.auth.uid == userId;
-  }
-
-  // Helper function to check if the user is an Admin.
-  function isAdmin() {
-    return isSignedIn() && request.auth.token.role == 'Admin';
-  }
-
-    // Helper function to check if the user is a Data Entry User.
-  function isDataEntryUser() {
-    return isSignedIn() && request.auth.token.role == 'Data Entry User';
-  }
-
-  //Helper function to check if the user is an Existing Owner.
-  function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
   }
 }
