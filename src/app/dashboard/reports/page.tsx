@@ -13,6 +13,7 @@ export default function ViewReportsPage() {
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
 
   useEffect(() => {
     if (!firestore || !user) return;
@@ -25,7 +26,7 @@ export default function ViewReportsPage() {
         console.error("Error checking admin status:", e);
         setIsAdmin(false);
       } finally {
-        setIsLoading(false);
+        setAuthCheckCompleted(true);
       }
     };
 
@@ -34,7 +35,8 @@ export default function ViewReportsPage() {
 
 
   useEffect(() => {
-    if (isLoading || !firestore || !user) return;
+    if (!authCheckCompleted || !firestore || !user) return;
+    setIsLoading(true);
 
     const fetchReports = () => {
         let reportsQuery;
@@ -60,11 +62,13 @@ export default function ViewReportsPage() {
                     path: path,
                 });
                 errorEmitter.emit('permission-error', permissionError);
+            }).finally(() => {
+                setIsLoading(false);
             });
     };
 
     fetchReports();
-  }, [firestore, user, isAdmin, isLoading]);
+  }, [firestore, user, isAdmin, authCheckCompleted]);
 
 
   if (isLoading) {

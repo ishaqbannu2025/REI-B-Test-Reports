@@ -1,3 +1,4 @@
+
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
@@ -12,12 +13,12 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
+  const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
 
   useEffect(() => {
     if (!authUser || !firestore) return;
 
     const checkAdminStatus = async () => {
-        setIsLoading(true);
         try {
             const idTokenResult = await authUser.getIdTokenResult();
             setIsAllowed(idTokenResult.claims.role === 'Admin');
@@ -25,7 +26,7 @@ export default function UsersPage() {
             console.error("Error checking admin status:", error);
             setIsAllowed(false);
         } finally {
-            setIsLoading(false);
+            setAuthCheckCompleted(true);
         }
     };
 
@@ -33,13 +34,18 @@ export default function UsersPage() {
   }, [authUser, firestore]);
 
   useEffect(() => {
-    if (!firestore || !isAllowed || isLoading) {
-        if (!isLoading && !isAllowed) {
-            setUsers([]);
-        }
+    if (!authCheckCompleted || !firestore) {
+        setIsLoading(false);
         return;
     };
+    
+    if(!isAllowed) {
+        setUsers([]);
+        setIsLoading(false);
+        return;
+    }
 
+    setIsLoading(true);
     const usersCollectionRef = collection(firestore, 'users');
     const q = query(usersCollectionRef);
 
@@ -56,16 +62,18 @@ export default function UsersPage() {
         }
       });
       setUsers(fetchedUsers as UserProfile[]);
+      setIsLoading(false);
     }, (error) => {
       const contextualError = new FirestorePermissionError({
         operation: 'list',
         path: usersCollectionRef.path,
       });
       errorEmitter.emit('permission-error', contextualError);
+      setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firestore, isAllowed, isLoading]);
+  }, [firestore, isAllowed, authCheckCompleted]);
 
 
   if (isLoading) {

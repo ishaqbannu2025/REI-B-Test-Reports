@@ -16,6 +16,8 @@ export default function AnalyticsPage() {
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
+
 
   useEffect(() => {
     if (!firestore || !user) return;
@@ -28,8 +30,7 @@ export default function AnalyticsPage() {
         console.error("Error checking admin status:", e);
         setIsAdmin(false); // Default to non-admin on error
       } finally {
-        // We set loading to false here, so the next effect can run
-        setIsLoading(false);
+        setAuthCheckCompleted(true);
       }
     };
 
@@ -39,7 +40,8 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     // This effect should wait until the admin check is complete
-    if (isLoading || !firestore || !user) return;
+    if (!authCheckCompleted || !firestore || !user) return;
+    setIsLoading(true);
 
     const fetchReports = () => {
       let reportsQuery;
@@ -67,13 +69,15 @@ export default function AnalyticsPage() {
               path: path,
             });
             errorEmitter.emit('permission-error', permissionError);
+        }).finally(() => {
+            setIsLoading(false);
         });
     };
 
     fetchReports();
-  }, [firestore, user, isAdmin, isLoading]);
+  }, [firestore, user, isAdmin, authCheckCompleted]);
   
-  if (isLoading && allReports.length === 0) {
+  if (isLoading) {
     return <div>Loading Analytics...</div>
   }
 
