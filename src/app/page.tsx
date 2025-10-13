@@ -39,7 +39,7 @@ export default function LoginPage() {
     }
   }, [user, isUserLoading, router]);
 
-  const setAdminClaim = async (uid: string) => {
+  const setAdminClaim = async (uid: string): Promise<void> => {
     try {
       const response = await fetch('/api/set-admin-claim', {
         method: 'POST',
@@ -47,15 +47,19 @@ export default function LoginPage() {
         body: JSON.stringify({ uid }),
       });
       if (!response.ok) {
-        throw new Error('Failed to set admin claim.');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to set admin claim.');
       }
+      console.log(`Admin claim set for UID: ${uid}`);
     } catch (error) {
       console.error("Error in setAdminClaim:", error);
       toast({
         variant: "destructive",
         title: "Admin Setup Error",
-        description: "Could not set admin privileges.",
+        description: "Could not set admin privileges on the server.",
       });
+      // Re-throw to be caught by the caller
+      throw error;
     }
   };
 
@@ -64,7 +68,7 @@ export default function LoginPage() {
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-    const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
+    const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
   
     if (isNewUser) {
       const newUserProfile = {
@@ -72,30 +76,38 @@ export default function LoginPage() {
         email: firebaseUser.email,
         displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
         photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
-        role: isInitialAdmin ? 'Admin' : 'Data Entry User',
+        role: shouldBeAdmin ? 'Admin' : 'Data Entry User',
         createdAt: serverTimestamp(),
       };
       
       await setDoc(userDocRef, newUserProfile);
+      console.log(`New user profile created for ${firebaseUser.uid}`);
 
-      if (isInitialAdmin) {
+      if (shouldBeAdmin) {
+        console.log(`User is an admin, setting claim...`);
         await setAdminClaim(firebaseUser.uid);
-        await firebaseUser.getIdToken(true); // Force refresh
+        // CRITICAL: Force a refresh of the token to get the new claim immediately.
+        await firebaseUser.getIdToken(true);
+        console.log("Token refreshed after setting admin claim.");
       }
-
     } else {
-      // For existing users, check if they should be admin but don't have the claim yet.
-      const userDoc = await getDoc(userDocRef);
-      // Force a token refresh to get the latest claims from the server.
-      const idTokenResult = await firebaseUser.getIdTokenResult(true);
+        // For existing users, check if they SHOULD be admin but don't have the claim.
+        const idTokenResult = await firebaseUser.getIdTokenResult();
+        const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
 
-      if (isInitialAdmin && idTokenResult.claims.role !== 'Admin') {
-        // This user is in the admin list but doesn't have the claim yet.
-        await setAdminClaim(firebaseUser.uid);
-        await firebaseUser.getIdToken(true); // Force a second refresh
-      }
+        if (shouldBeAdmin && !isAlreadyAdmin) {
+            console.log(`Existing user ${firebaseUser.uid} should be admin, setting claim...`);
+            await setAdminClaim(firebaseUser.uid);
+            // CRITICAL: Force a refresh of the token to get the new claim.
+            await firebaseUser.getIdToken(true);
+            console.log("Token refreshed for existing user to grant admin role.");
+        } else {
+            // Also force a refresh on regular login to ensure claims are up-to-date.
+             await firebaseUser.getIdToken(true);
+        }
     }
   };
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,13 +116,15 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       await handleUserSetup(userCredential.user, false);
+      toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
       router.push('/dashboard');
     } catch (error: any) {
+      // If user not found, try creating a new account.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        // User doesn't exist, so create a new account
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
           await handleUserSetup(newUserCredential.user, true);
+          toast({ title: "Account Created", description: "Redirecting to dashboard..." });
           router.push('/dashboard');
         } catch (createError: any) {
           toast({

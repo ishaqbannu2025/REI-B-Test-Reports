@@ -15,7 +15,7 @@ export default function UsersPage() {
   useEffect(() => {
     const fetchData = async () => {
       if (!authUser || !firestore) {
-        setIsLoading(false);
+        setIsLoading(true);
         return;
       }
       
@@ -25,28 +25,31 @@ export default function UsersPage() {
         const idTokenResult = await authUser.getIdTokenResult(true);
         if (idTokenResult.claims.role !== 'Admin') {
             setIsAllowed(false);
-            throw new Error("User is not an admin.");
-        }
-        
-        setIsAllowed(true);
-        const usersCollectionRef = collection(firestore, 'users');
-        const q = query(usersCollectionRef);
-        const querySnapshot = await getDocs(q);
+            // This is not a permissions error, but an authorization failure.
+            // We can handle it gracefully on the client.
+            console.warn("User is not an admin. Access to users page denied.");
+        } else {
+            setIsAllowed(true);
+            const usersCollectionRef = collection(firestore, 'users');
+            const q = query(usersCollectionRef);
+            const querySnapshot = await getDocs(q);
 
-        const fetchedUsers = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              uid: doc.id,
-              displayName: data.displayName || data.email,
-              email: data.email,
-              role: data.role || 'Data Entry User',
-              photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
-            } as UserProfile;
-          });
-        setUsers(fetchedUsers);
+            const fetchedUsers = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                  id: doc.id,
+                  uid: doc.id,
+                  displayName: data.displayName || data.email,
+                  email: data.email,
+                  role: data.role || 'Data Entry User',
+                  photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
+                } as UserProfile;
+              });
+            setUsers(fetchedUsers);
+        }
       } catch (error) {
          setIsAllowed(false);
+         // This catch block would trigger if fetching the 'users' collection fails due to security rules.
          const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'users',
