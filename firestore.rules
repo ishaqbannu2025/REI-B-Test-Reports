@@ -1,71 +1,54 @@
-/**
- * @fileoverview Firestore Security Rules for Electrical Test Reports App.
- *
- * Core Philosophy:
- * This ruleset implements a role-based access control system where 'Admin' users have full read and write access,
- * 'Data Entry User' can create new test reports and read data,
- * and anonymous/unauthenticated users can read publicly accessible information.
- * The system relies on Firebase Authentication for user identity and custom claims ('role') to define user privileges.
- *
- * Data Structure:
- * - /users/{userId}: Stores user profile data. 'userId' must match the Firebase Auth UID. Only the user themselves and admins can access this data.
- * - /testReports/{reportId}:  A collection group containing all test reports.
- *
- * Key Security Decisions:
- * - Users can only create their own profile.
- * - Only authenticated users can create test reports
- * - Test reports can be listed by all users.
- *
- * Denormalization for Authorization:
- * - To keep rules simple and efficient, the 'TestReport' document includes the 'enteredBy' field,
- *   which stores the user ID of the report creator. This avoids having to perform expensive `get()` calls to the /users/{userId} collection
- *   to verify ownership.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Grants access to user profiles based on role and identity.
+     * @description Allows users to read and write their own profile data, and allows admins to read any user profile.
      * @path /users/{userId}
-     * @allow (create, update, get) User with matching UID.
-     * @deny (create, update, get) User with non-matching UID.
-     * @principle Enforces user-ownership for profile data and restricts unauthorized modifications.
+     * @allow (get, update, delete) if isSignedIn() && (isOwner(userId) || isAdmin())
+     * @allow (create) if isSignedIn() && isSelfCreation(userId)
+     * @allow (list) if false
+     * @deny (get) if !isSignedIn()
+     * @deny (create, update, delete) if !isSignedIn()
+     * @principle Enforces document ownership for writes and read access for admins.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      allow get: if isSignedIn() && isOwner(userId);
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isOwner(userId) && resource.data.uid == userId;
-      allow delete: if false;
+      allow create: if isSignedIn() && isSelfCreation(userId);
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
     }
 
     /**
-     * @description Grants access to testReports collection group
+     * @description Allows admins to list test reports through collection group query. Individual document access is not directly controlled here.
      * @path /testReports/{reportId}
-     * @allow (list) All signed in users can list
-     * @allow (create) Signed in users can create a new test report.
-     * @deny (update, delete) No users can update or delete.
-     * @principle Test reports collection group is public readable by all users.
+     * @allow (list) if isAdmin()
+     * @deny (get, create, update, delete) if true
+     * @principle Restricts collection group access to admins only.
      */
-    match /testReports/{reportId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
+    match /{path=**}/testReports/{reportId} {
+        allow get: if isAdmin();
+        allow list: if isAdmin();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+    }
 
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.enteredBy == request.auth.uid;
-      allow update: if false;
-      allow delete: if false;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isSelfCreation(userId) {
+        return request.auth.uid == userId && request.resource.data.uid == request.auth.uid;
+    }
+
+    function isAdmin() {
+      return request.auth.token.role == 'Admin';
     }
   }
 }

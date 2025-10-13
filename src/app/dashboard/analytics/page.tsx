@@ -17,7 +17,6 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Wait until both user and firestore are available.
       if (!user || !firestore) {
         setIsLoading(true);
         return;
@@ -25,16 +24,13 @@ export default function AnalyticsPage() {
       setIsLoading(true);
 
       try {
-        // Force a token refresh to get the latest custom claims.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
-           // Admins can query all reports across all users.
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
-           // Regular users can only query their own reports.
           reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
         }
         
@@ -48,12 +44,10 @@ export default function AnalyticsPage() {
         setAllReports(reports);
 
       } catch (error) {
-        // Create a contextual error for the failed collection group query
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'testReports (collection group)',
         });
-        // Emit the error to be caught by the global error listener
         errorEmitter.emit('permission-error', contextualError);
       } finally {
         setIsLoading(false);
