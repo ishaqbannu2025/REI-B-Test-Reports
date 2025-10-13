@@ -15,9 +15,8 @@ export default function ViewReportsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
+      // Wait until the user object is available.
       if (!user || !firestore) {
-        // Don't start fetching if user or firestore isn't ready.
-        // The hook will re-run when they become available.
         return;
       }
       
@@ -25,6 +24,7 @@ export default function ViewReportsPage() {
       
       try {
         // Force refresh of the token to ensure we have the latest claims.
+        // This is the definitive step to confirm the user's role.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         

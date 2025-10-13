@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -34,14 +35,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('Innovation123');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingMessage, setProcessingMessage] = useState('Please wait...');
+  const [isSetupComplete, setIsSetupComplete] = useState(false);
   
-  // This effect will run when the user object is available after a successful login.
-  // It redirects a fully authenticated and set-up user to the dashboard.
   useEffect(() => {
-    if (user && !isUserLoading) {
+    // This effect now only runs when the setup process is fully complete.
+    if (user && !isUserLoading && isSetupComplete) {
       router.push('/dashboard');
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, isSetupComplete, router]);
 
 
   const setAdminClaim = async (uid: string): Promise<void> => {
@@ -65,8 +66,8 @@ export default function LoginPage() {
     
     const userDoc = await getDoc(userDocRef);
     
-    // Create user profile in Firestore if it doesn't exist
     if (!userDoc.exists()) {
+      setProcessingMessage("Creating user profile...");
       const newUserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -78,22 +79,18 @@ export default function LoginPage() {
       await setDoc(userDocRef, newUserProfile);
     }
   
-    // If the user should be an admin, ensure the claim is set and the token is refreshed.
     if (shouldBeAdmin) {
         const initialToken = await firebaseUser.getIdTokenResult();
-        // Only set the claim if it's not already present.
         if (initialToken.claims.role !== 'Admin') {
-            setProcessingMessage("Verifying Admin Role..."); // Update UI message
+            setProcessingMessage("Verifying Admin Role...");
             await setAdminClaim(firebaseUser.uid);
-            
             // CRITICAL: Force a refresh of the token on the client to get the new claim.
-            // This ensures subsequent requests and security rules see the 'Admin' role.
+            // This is the blocking step that ensures the role is present before proceeding.
             await firebaseUser.getIdToken(true); 
         }
     }
   };
   
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
@@ -104,10 +101,8 @@ export default function LoginPage() {
     let userCredential;
 
     try {
-      // First, try to sign in.
       userCredential = await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
-      // If sign-in fails because the user doesn't exist, create a new account.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         try {
           toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
@@ -119,29 +114,28 @@ export default function LoginPage() {
           return;
         }
       } else {
-        // Handle other login errors (e.g., network issues).
         toast({ variant: "destructive", title: "Login Error", description: error.message });
         setIsProcessing(false);
         return;
       }
     }
 
-    // After a successful login/signup, run the setup process.
     try {
-        toast({ title: "Login Successful", description: "Finalizing setup..." });
+        setProcessingMessage("Finalizing setup...");
+        // Await the entire setup process. Navigation will not happen until this is done.
         await handleUserSetup(userCredential.user);
-        // The useEffect hook will handle the redirect once the user state is updated.
-        // No need to manually redirect here.
+        toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
+        // Signal that setup is complete, allowing the useEffect to navigate.
+        setIsSetupComplete(true);
     } catch(setupError: any) {
         toast({
           variant: "destructive",
           title: "Setup Error",
           description: setupError.message,
         });
-    } finally {
-        // After setup is complete (or has failed), allow the user to try again if needed.
         setIsProcessing(false);
     }
+    // We intentionally don't set isProcessing to false here, as the page will redirect.
   };
   
   if (isUserLoading && !user) {
@@ -153,8 +147,14 @@ export default function LoginPage() {
   }
   
   // While the user is logged in but the page is transitioning, show nothing to avoid flicker.
-  if(user && !isUserLoading) {
-    return null;
+  if(user && !isUserLoading && !isSetupComplete) {
+     // If user is logged in but setup isn't complete (e.g. on page refresh), don't show the form.
+     // The main useEffect will try to redirect if setup completes.
+     return (
+       <div className="flex min-h-screen items-center justify-center">
+          <p>Finalizing session...</p>
+        </div>
+     );
   }
 
   return (
