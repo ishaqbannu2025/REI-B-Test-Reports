@@ -18,23 +18,20 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Wait until the user object is available.
       if (!user || !firestore) {
+        setIsLoading(true);
         return;
       }
       setIsLoading(true);
 
       try {
-        // Force refresh to get the latest claims. This is the definitive step.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
-          // If admin, query all reports across all users.
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
-          // If not admin, query only the current user's reports.
           reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
         }
         
@@ -48,7 +45,6 @@ export default function AnalyticsPage() {
         setAllReports(reports);
 
       } catch (error) {
-        // Emit a contextual error if the query fails.
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'testReports (collection group)',

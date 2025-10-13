@@ -38,9 +38,13 @@ export default function LoginPage() {
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   
   useEffect(() => {
-    // This effect now only runs when the setup process is fully complete.
+    // If the user is loaded, and setup is complete, navigate to dashboard
     if (user && !isUserLoading && isSetupComplete) {
       router.push('/dashboard');
+    }
+    // If user is already logged in (e.g. page refresh), kick off setup process
+    else if (user && !isUserLoading && !isProcessing) {
+       handleLogin(undefined, true); // Pass a flag to indicate it's a refresh
     }
   }, [user, isUserLoading, isSetupComplete, router]);
 
@@ -91,42 +95,48 @@ export default function LoginPage() {
     }
   };
   
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent, isRefresh: boolean = false) => {
+    if (e) e.preventDefault();
     if (!auth) return;
     
     setIsProcessing(true);
-    setProcessingMessage('Logging in...');
-    
     let userCredential;
 
-    try {
-      userCredential = await signInWithEmailAndPassword(auth, email, password);
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+    // On a refresh, the user is already available from the hook.
+    if(isRefresh && user) {
+        userCredential = { user };
+    } else {
+        setProcessingMessage('Logging in...');
         try {
-          toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
-          setProcessingMessage('Creating Account...');
-          userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        } catch (createError: any) {
-          toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
-          setIsProcessing(false);
-          return;
+          userCredential = await signInWithEmailAndPassword(auth, email, password);
+        } catch (error: any) {
+          if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            try {
+              toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
+              setProcessingMessage('Creating Account...');
+              userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            } catch (createError: any) {
+              toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
+              setIsProcessing(false);
+              return;
+            }
+          } else {
+            toast({ variant: "destructive", title: "Login Error", description: error.message });
+            setIsProcessing(false);
+            return;
+          }
         }
-      } else {
-        toast({ variant: "destructive", title: "Login Error", description: error.message });
-        setIsProcessing(false);
-        return;
-      }
     }
 
     try {
         setProcessingMessage("Finalizing setup...");
         // Await the entire setup process. Navigation will not happen until this is done.
-        await handleUserSetup(userCredential.user);
-        toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
-        // Signal that setup is complete, allowing the useEffect to navigate.
-        setIsSetupComplete(true);
+        if (userCredential?.user) {
+            await handleUserSetup(userCredential.user);
+            toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
+            // Signal that setup is complete, allowing the useEffect to navigate.
+            setIsSetupComplete(true);
+        }
     } catch(setupError: any) {
         toast({
           variant: "destructive",
@@ -135,26 +145,20 @@ export default function LoginPage() {
         });
         setIsProcessing(false);
     }
-    // We intentionally don't set isProcessing to false here, as the page will redirect.
   };
   
-  if (isUserLoading && !user) {
+  // This state is for when the user is not logged in yet, and we're waiting for the hook to confirm that.
+  if (isUserLoading || (user && !isSetupComplete)) {
       return (
         <div className="flex min-h-screen items-center justify-center">
-          <p>Loading Authentication...</p>
+          <p>{processingMessage}</p>
         </div>
       )
   }
   
-  // While the user is logged in but the page is transitioning, show nothing to avoid flicker.
-  if(user && !isUserLoading && !isSetupComplete) {
-     // If user is logged in but setup isn't complete (e.g. on page refresh), don't show the form.
-     // The main useEffect will try to redirect if setup completes.
-     return (
-       <div className="flex min-h-screen items-center justify-center">
-          <p>Finalizing session...</p>
-        </div>
-     );
+  if (user && isSetupComplete) {
+      // The useEffect will handle the redirect, show a message while it happens.
+      return <div className="flex min-h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
   }
 
   return (
@@ -219,3 +223,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

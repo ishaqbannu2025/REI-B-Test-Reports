@@ -15,8 +15,8 @@ export default function ViewReportsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Wait until the user object is available.
       if (!user || !firestore) {
+        setIsLoading(true); // Keep loading if user/firestore isn't ready
         return;
       }
       
@@ -74,3 +74,4 @@ export default function ViewReportsPage() {
     </div>
   );
 }
+
