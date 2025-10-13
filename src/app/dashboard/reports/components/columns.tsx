@@ -31,11 +31,13 @@ import {
 import { deleteDocumentNonBlocking, useFirebase } from "@/firebase"
 import { useToast } from "@/hooks/use-toast"
 import React from "react"
+import { useRouter } from "next/navigation"
 
 
 const ReportActions = ({ report }: { report: TestReport }) => {
   const { firestore } = useFirebase();
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleDelete = () => {
     if (!firestore) return;
@@ -51,6 +53,10 @@ const ReportActions = ({ report }: { report: TestReport }) => {
       title: "Report Deleted",
       description: `Report with UIN ${report.uin} has been scheduled for deletion.`,
     });
+  };
+
+  const handleEdit = () => {
+    router.push(`/dashboard/reports/${report.uin}/edit`);
   };
 
   return (
@@ -69,7 +75,7 @@ const ReportActions = ({ report }: { report: TestReport }) => {
               View Details & Print
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem>Edit Report</DropdownMenuItem>
+          <DropdownMenuItem onClick={handleEdit}>Edit Report</DropdownMenuItem>
           <DropdownMenuSeparator />
           <AlertDialogTrigger asChild>
             <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
