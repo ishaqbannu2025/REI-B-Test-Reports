@@ -14,17 +14,21 @@ export default function ViewReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !firestore) {
-      if(typeof user !== 'undefined') { // if user is explicitly null (not loading)
-        setIsLoading(false);
-      }
-      return;
-    };
-
+    // This function will be called whenever the user or firestore instance changes.
     const fetchReports = async () => {
+      // Guard clause: Do not proceed if user or firestore are not ready.
+      if (!user || !firestore) {
+        // If the user object is explicitly null (not just loading), we can stop loading.
+        if (typeof user !== 'undefined') {
+          setIsLoading(false);
+        }
+        return;
+      }
+
       setIsLoading(true);
       try {
-        const idTokenResult = await user.getIdTokenResult(true); // Force refresh to get latest claims
+        // Force a token refresh to get the latest custom claims.
+        const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims?.role === 'Admin';
         
         let reportsQuery;
@@ -59,7 +63,7 @@ export default function ViewReportsPage() {
     
     fetchReports();
 
-  }, [user, firestore]);
+  }, [user, firestore]); // Dependency array ensures this runs when user or firestore are resolved.
 
 
   if (isLoading) {

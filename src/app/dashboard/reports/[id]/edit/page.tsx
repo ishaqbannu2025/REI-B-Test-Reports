@@ -57,7 +57,8 @@ const formSchema = z.object({
 
 export default function EditReportPage() {
   const { toast } = useToast();
-  const { firestore, user } = useFirebase();
+  const { firestore } = useFirebase();
+  const { user } = useUser();
   const params = useParams();
   const router = useRouter();
   const { id: uin } = params; // This is the UIN
@@ -77,6 +78,7 @@ export default function EditReportPage() {
     const findReport = async () => {
       setIsLoading(true);
       try {
+        // Admins and users who created the report can edit, so we query the collection group.
         const reportsRef = collectionGroup(firestore, 'testReports');
         const q = query(reportsRef, where('uin', '==', uin));
         
@@ -95,8 +97,13 @@ export default function EditReportPage() {
             } else if (challanDate instanceof Date) {
               formattedChallanDate = format(challanDate, 'yyyy-MM-dd');
             } else if (typeof challanDate === 'string') {
-              // Attempt to parse string dates, common format is ISO string
-              formattedChallanDate = format(parseISO(challanDate), 'yyyy-MM-dd');
+              try {
+                 // Attempt to parse string dates, common format is ISO string
+                formattedChallanDate = format(parseISO(challanDate), 'yyyy-MM-dd');
+              } catch {
+                // If parsing fails, it might be in 'yyyy-MM-dd' already
+                formattedChallanDate = challanDate;
+              }
             }
           }
 
@@ -105,6 +112,7 @@ export default function EditReportPage() {
             challanDate: formattedChallanDate,
             remarks: reportData.remarks || '',
             governmentFee: reportData.governmentFee || 0,
+            sanctionedLoad: reportData.sanctionedLoad?.toString() || '',
           });
 
         } else {
@@ -132,11 +140,9 @@ export default function EditReportPage() {
       return;
     }
     
-    // The document ID might be the UIN, but the original `id` from the doc is safer.
-    // The path requires the original creator's UID (`enteredBy`).
+    // The path requires the original creator's UID (`enteredBy`) and the report's actual document ID.
     const reportRef = doc(firestore, 'users', report.enteredBy, 'testReports', report.id);
     
-    // We only update the values from the form, leaving metadata like entryDate and enteredBy untouched.
     const updateData = {
         ...values,
         challanDate: values.challanDate ? new Date(values.challanDate) : new Date()

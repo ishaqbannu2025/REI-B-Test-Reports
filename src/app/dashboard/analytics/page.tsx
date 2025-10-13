@@ -17,17 +17,20 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !firestore) {
-      if (typeof user !== 'undefined') { // if user is explicitly null (not loading)
-        setIsLoading(false);
-      }
-      return;
-    }
-
     const fetchReports = async () => {
+      // Guard clause: Do not proceed if user or firestore are not ready.
+      if (!user || !firestore) {
+        // If the user object is explicitly null (not just loading), we can stop loading.
+        if (typeof user !== 'undefined') { 
+          setIsLoading(false);
+        }
+        return;
+      }
+
       setIsLoading(true);
       try {
-        const idTokenResult = await user.getIdTokenResult(true); // Force refresh
+        // Force a token refresh to get the latest custom claims.
+        const idTokenResult = await user.getIdTokenResult(true); 
         const isAdmin = idTokenResult.claims?.role === 'Admin';
         
         let reportsQuery;
