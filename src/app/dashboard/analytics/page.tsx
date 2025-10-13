@@ -1,3 +1,4 @@
+
 'use client';
 
 import { StatCard } from '../components/stat-card';
@@ -5,7 +6,7 @@ import { CategoryChart } from '../components/category-chart';
 import { RecentReports } from '../components/recent-reports';
 import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase } from '@/firebase';
 import { query, orderBy, getDocs, collectionGroup, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
@@ -17,6 +18,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
+      // Ensure both user and firestore are available.
       if (!user || !firestore) {
         setIsLoading(true);
         return;
@@ -24,13 +26,16 @@ export default function AnalyticsPage() {
       setIsLoading(true);
 
       try {
+        // Force a token refresh to get the latest custom claims.
         const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
         if (isAdmin) {
+          // If admin, query all reports across all users.
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
+          // If not admin, query only the current user's reports.
           reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
         }
         
@@ -44,6 +49,7 @@ export default function AnalyticsPage() {
         setAllReports(reports);
 
       } catch (error) {
+        // Emit a contextual error if the query fails.
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'testReports (collection group)',

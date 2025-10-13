@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -22,7 +23,7 @@ import {
   createUserWithEmailAndPassword,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -61,12 +62,16 @@ export default function LoginPage() {
     }
   };
 
-  const handleUserSetup = async (firebaseUser: FirebaseUser, isNewUser: boolean) => {
+  const handleUserSetup = async (firebaseUser: FirebaseUser) => {
     if (!firestore) return;
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
     const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
+    
+    // Check if the user document already exists.
+    const userDoc = await getDoc(userDocRef);
+    const isNewUser = !userDoc.exists();
   
     if (isNewUser) {
       const newUserProfile = {
@@ -82,14 +87,15 @@ export default function LoginPage() {
     }
 
     if (shouldBeAdmin) {
-      // Get current claims
-      const idTokenResult = await firebaseUser.getIdTokenResult();
+      // Get current claims by forcing a token refresh
+      const idTokenResult = await firebaseUser.getIdTokenResult(true);
       const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
       
       if (!isAlreadyAdmin) {
         console.log(`User ${firebaseUser.uid} requires admin claim. Setting now...`);
+        // Call the server-side function to set the claim.
         await setAdminClaim(firebaseUser.uid);
-        // CRITICAL: Force a refresh of the token to get the new claim immediately.
+        // CRITICAL: Force a refresh of the token again to get the new claim immediately.
         await firebaseUser.getIdToken(true);
         console.log("Token refreshed to apply new admin claim.");
       }
@@ -103,17 +109,19 @@ export default function LoginPage() {
     
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      await handleUserSetup(userCredential.user, false);
+      // After sign-in, run the setup which includes the admin check and claim logic.
+      await handleUserSetup(userCredential.user);
       toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
-      router.push('/dashboard');
+      // The useEffect will handle the redirect.
     } catch (error: any) {
       // If user doesn't exist, try creating a new account for them.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
-          await handleUserSetup(newUserCredential.user, true);
+          // After sign-up, run the setup.
+          await handleUserSetup(newUserCredential.user);
           toast({ title: "Account Created", description: "Redirecting to dashboard..." });
-          router.push('/dashboard');
+          // The useEffect will handle the redirect.
         } catch (createError: any) {
           toast({
             variant: "destructive",

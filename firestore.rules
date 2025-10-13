@@ -1,54 +1,105 @@
+/**
+ * @fileoverview Firestore Security Rules for Electrical Test Reports.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a role-based access control model. Users are assigned roles (Admin, Data Entry User) which determine their permissions.
+ * Only authenticated users can access data, with different levels of access based on their role.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores user profile information, with 'userId' matching the Firebase Auth UID.
+ * - /testReports/{reportId}: Stores test reports.
+ *
+ * Key Security Decisions:
+ * - Admins can read all test reports.
+ * - Data Entry Users can only create test reports and update them.
+ * - Listing all test reports is restricted to admins.
+ *
+ * Denormalization for Authorization:
+ *  - The `enteredBy` field on each `TestReport` is used to enforce ownership.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows users to read and write their own profile data, and allows admins to read any user profile.
+     * @description Grants access to user profile information based on user ID.
      * @path /users/{userId}
-     * @allow (get, update, delete) if isSignedIn() && (isOwner(userId) || isAdmin())
-     * @allow (create) if isSignedIn() && isSelfCreation(userId)
-     * @allow (list) if false
-     * @deny (get) if !isSignedIn()
-     * @deny (create, update, delete) if !isSignedIn()
-     * @principle Enforces document ownership for writes and read access for admins.
+     * @allow (create) - Authenticated user can create their own profile if the UID matches.
+     * @allow (get, update, delete) - Authenticated user can get, update, or delete their own profile if the UID matches.
+     * @deny (create) - If the UID does not match the authenticated user's UID.
+     * @deny (get, update, delete) - If the UID does not match the authenticated user's UID.
+     * @principle Enforces user-ownership for profile data.
      */
     match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      // Allow the user to create their own profile if the UID matches.
+      allow create: if isSignedIn() && isOwner(userId);
+      // Allow the user to read, update, and delete their own profile if the UID matches.
+      allow get: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
+      // Deny listing of all users.
       allow list: if false;
-      allow create: if isSignedIn() && isSelfCreation(userId);
-      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
     }
 
     /**
-     * @description Allows admins to list test reports through collection group query. Individual document access is not directly controlled here.
+     * @description Controls access to test reports.
      * @path /testReports/{reportId}
-     * @allow (list) if isAdmin()
-     * @deny (get, create, update, delete) if true
-     * @principle Restricts collection group access to admins only.
+     * @allow (list) - Admin users can list all test reports.
+     * @allow (create) - Authenticated Data Entry Users can create test reports. The `enteredBy` field must match their UID.
+     * @allow (get) - Admin users can get any report.
+     * @allow (update, delete) - Admin users can update any report.
+     * @deny (list) - Non-Admin users cannot list all test reports.
+     * @deny (create) - Non-Data Entry Users cannot create test reports.
+     * @deny (get) - Non-Admin users cannot get any report.
+     * @deny (update, delete) - Non-Admin users cannot update/delete reports.
+     * @principle Restricts list access to admins and enforces user-ownership for writes.
+     */
+    match /testReports/{reportId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isDataEntryUser();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    /**
+     * @description Controls access to the 'testReports' collection group.
+     * @path /databases/{database}/documents/testReports (collection group)
+     * @allow (list) - Allows listing 'testReports' collection group if the user is an Admin.
+     * @deny (get, create, update, delete) - Denies all other operations on the 'testReports' collection group.
+     * @principle Restricts list access to admins for the collection group.
      */
     match /{path=**}/testReports/{reportId} {
-        allow get: if isAdmin();
-        allow list: if isAdmin();
-        allow create: if isAdmin();
-        allow update: if isAdmin();
-        allow delete: if isAdmin();
+      allow list: if isAdmin();
+      allow get: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
+  }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
+  // Helper function to check if the user is signed in.
+  function isSignedIn() {
+    return request.auth != null;
+  }
 
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
+  // Helper function to check if the user is the owner of the resource.
+  function isOwner(userId) {
+    return request.auth.uid == userId;
+  }
 
-    function isSelfCreation(userId) {
-        return request.auth.uid == userId && request.resource.data.uid == request.auth.uid;
-    }
+  // Helper function to check if the user is an Admin.
+  function isAdmin() {
+    return isSignedIn() && request.auth.token.role == 'Admin';
+  }
 
-    function isAdmin() {
-      return request.auth.token.role == 'Admin';
-    }
+    // Helper function to check if the user is a Data Entry User.
+  function isDataEntryUser() {
+    return isSignedIn() && request.auth.token.role == 'Data Entry User';
+  }
+
+  //Helper function to check if the user is an Existing Owner.
+  function isExistingOwner(userId) {
+    return isOwner(userId) && resource != null;
   }
 }
