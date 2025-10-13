@@ -1,14 +1,15 @@
+
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 export default function ViewReportsPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, user } = useUser(); // useUser directly
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

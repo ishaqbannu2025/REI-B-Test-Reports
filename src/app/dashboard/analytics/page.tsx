@@ -1,3 +1,4 @@
+
 'use client';
 
 import { StatCard } from '../components/stat-card';
@@ -5,13 +6,14 @@ import { CategoryChart } from '../components/category-chart';
 import { RecentReports } from '../components/recent-reports';
 import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import { query, orderBy, getDocs, collectionGroup, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 export default function AnalyticsPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore } = useFirebase();
+  const { user } = useUser();
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

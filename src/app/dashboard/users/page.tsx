@@ -1,13 +1,15 @@
+
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
-import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirebase, errorEmitter, FirestorePermissionError, useUser } from '@/firebase';
 import { collection, query, getDocs } from 'firebase/firestore';
 
 export default function UsersPage() {
-  const { firestore, user: authUser } = useFirebase();
+  const { firestore } = useFirebase();
+  const { user: authUser } = useUser();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);

@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -36,19 +37,26 @@ export default function LoginPage() {
   const [processingMessage, setProcessingMessage] = useState('Please wait...');
   const [isSetupComplete, setIsSetupComplete] = useState(false);
 
-  // This effect will run when the user is authenticated and the setup is complete.
+  // Effect to redirect the user if they are logged in and setup is complete.
   useEffect(() => {
     if (user && !isUserLoading && isSetupComplete) {
       router.push('/dashboard');
     }
   }, [user, isUserLoading, isSetupComplete, router]);
 
-  // This effect handles the case where a user is already logged in (e.g., page refresh).
+  // Effect to handle users who are already logged in (e.g., on page refresh).
+  // It triggers the setup and role verification process.
   useEffect(() => {
-    if (user && !isUserLoading && !isProcessing) {
-      handleLogin(undefined, true); // Trigger the setup process for an existing session.
+    if (user && !isUserLoading && !isProcessing && !isSetupComplete) {
+      // Don't use a loading screen message, just process in the background.
+      setIsProcessing(true);
+      handleUserSetup(user).then(() => {
+        setIsSetupComplete(true);
+        setIsProcessing(false);
+      });
     }
-  }, [user, isUserLoading]);
+  }, [user, isUserLoading, isSetupComplete]);
+
 
   const setAdminClaim = async (uid: string): Promise<void> => {
     const response = await fetch('/api/set-admin-claim', {
@@ -86,61 +94,53 @@ export default function LoginPage() {
     }
   
     if (shouldBeAdmin) {
-        setProcessingMessage("Verifying Admin Role...");
-        // This forces a refresh of the token to get the latest claims.
-        const initialToken = await firebaseUser.getIdTokenResult();
-        // Only set the claim if it's not already present.
-        if (initialToken.claims.role !== 'Admin') {
-            setProcessingMessage("Setting Admin Role...");
-            await setAdminClaim(firebaseUser.uid);
-            // CRITICAL: Force refresh the token *after* setting the claim.
-            await firebaseUser.getIdToken(true); 
-            setProcessingMessage("Admin Role Confirmed.");
-        }
+      const initialToken = await firebaseUser.getIdTokenResult();
+      if (initialToken.claims.role !== 'Admin') {
+          setProcessingMessage("Setting Admin Role...");
+          await setAdminClaim(firebaseUser.uid);
+          // CRITICAL: Force refresh the token *after* setting the claim to get the latest claims.
+          setProcessingMessage("Verifying Admin Role...");
+          await firebaseUser.getIdToken(true); 
+      }
     }
+    setProcessingMessage("Setup Complete.");
   };
   
-  const handleLogin = async (e?: React.FormEvent, isRefresh: boolean = false) => {
+  const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    // If it's a manual login attempt, ensure we are not already processing.
-    if (!isRefresh && isProcessing) return;
+    if (isProcessing) return;
 
     setIsProcessing(true);
-    let currentUser: FirebaseUser | null = user;
+    setProcessingMessage('Logging in...');
 
-    if (!isRefresh) {
-        setProcessingMessage('Logging in...');
+    let currentUser: FirebaseUser | null = null;
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      currentUser = userCredential.user;
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
+          setProcessingMessage('Creating Account...');
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
           currentUser = userCredential.user;
-        } catch (error: any) {
-          if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-            try {
-              toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
-              setProcessingMessage('Creating Account...');
-              const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-              currentUser = userCredential.user;
-            } catch (createError: any) {
-              toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
-              setIsProcessing(false);
-              return;
-            }
-          } else {
-            toast({ variant: "destructive", title: "Login Error", description: error.message });
-            setIsProcessing(false);
-            return;
-          }
+        } catch (createError: any) {
+          toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
+          setIsProcessing(false);
+          return;
         }
+      } else {
+        toast({ variant: "destructive", title: "Login Error", description: error.message });
+        setIsProcessing(false);
+        return;
+      }
     }
 
     if (currentUser) {
         try {
-            setProcessingMessage("Finalizing setup...");
-            // Await the entire setup process, including token refresh.
             await handleUserSetup(currentUser);
-            // Only set setup complete after all async operations in handleUserSetup are done.
-            setIsSetupComplete(true);
-            toast({ title: "Setup Complete", description: "Redirecting to dashboard..." });
+            setIsSetupComplete(true); // This will trigger the useEffect to redirect.
         } catch(setupError: any) {
             toast({
               variant: "destructive",
@@ -150,14 +150,13 @@ export default function LoginPage() {
             setIsProcessing(false); // Stop processing on error.
         }
     } else {
-        // This case handles a page load where the user isn't logged in yet.
-        setIsProcessing(false);
+       setIsProcessing(false);
     }
   };
   
-  // This is the primary loading/blocking UI.
-  // It shows when the user is being loaded OR when they are logged in but setup is not yet complete.
-  if (isUserLoading || (user && !isSetupComplete)) {
+  // Display a loading message if Firebase is still determining the initial user state,
+  // or if we are actively processing a login/setup.
+  if (isUserLoading || isProcessing) {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <p>{processingMessage}</p>
@@ -165,12 +164,13 @@ export default function LoginPage() {
       )
   }
   
-  // This state is hit when a user is logged in, and setup is complete, just before the useEffect redirects them.
+  // If the user is logged in and setup is complete, the useEffect will handle the redirect.
+  // We can show a redirecting message in the meantime.
   if (user && isSetupComplete) {
       return <div className="flex min-h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
   }
 
-  // This is the default state: user is not logged in.
+  // Default state: user is not logged in, show the login form.
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
       <div className="flex items-center justify-center py-12">
@@ -192,7 +192,6 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isProcessing}
               />
             </div>
             <div className="grid gap-2">
@@ -205,11 +204,10 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={isProcessing}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isProcessing}>
-              {isProcessing ? processingMessage : 'Login or Sign Up'}
+            <Button type="submit" className="w-full">
+              Login or Sign Up
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
