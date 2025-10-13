@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -41,7 +40,7 @@ export default function LoginPage() {
   }, [user, isUserLoading, router]);
 
   const setAdminClaim = async (uid: string) => {
-    // This function will call our new API route to set a custom claim.
+    // This function will call our API route to set a custom claim.
     await fetch('/api/set-admin-claim', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -69,7 +68,6 @@ export default function LoginPage() {
           role: isInitialAdmin ? 'Admin' : 'Data Entry User',
         };
 
-        // Create document with proper error handling
         await setDoc(userDocRef, newUserProfile)
           .catch(error => {
             const contextualError = new FirestorePermissionError({
@@ -78,28 +76,28 @@ export default function LoginPage() {
               requestResourceData: newUserProfile,
             });
             errorEmitter.emit('permission-error', contextualError);
-            throw contextualError; // Re-throw to be caught by the outer try/catch
+            throw contextualError;
           });
 
         if (isInitialAdmin) {
             await setAdminClaim(firebaseUser.uid);
-             // Force refresh the token to get the new claim
+             // Force refresh the token to get the new claim. CRITICAL for rules to work immediately.
             await firebaseUser.getIdToken(true);
         }
       } else {
-        // If user exists, check if they are an admin and ensure claim is set
+        // If user exists, check their token. If they don't have the admin claim but should, set it.
+        const idTokenResult = await firebaseUser.getIdTokenResult();
         const userData = userDoc.data();
-        if (userData.role === 'Admin') {
+        if (userData.role === 'Admin' && !idTokenResult.claims.role) {
           await setAdminClaim(firebaseUser.uid);
+          // Force refresh the token to get the new claim.
           await firebaseUser.getIdToken(true);
         }
       }
     } catch(error) {
        if (error instanceof FirestorePermissionError) {
-         // Already handled, just re-throw or handle as needed
          throw error;
        }
-       // Catch errors from getDoc
        const contextualError = new FirestorePermissionError({
          operation: 'get',
          path: userDocRef.path,
@@ -114,23 +112,19 @@ export default function LoginPage() {
     if (!auth) return;
     
     try {
-      // First, try to sign in
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       await handleUserSetup(userCredential.user);
     } catch (error: any) {
       if (error instanceof FirestorePermissionError) {
-        // The detailed error is already thrown and will be displayed by the error boundary
         return;
       }
 
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        // If user doesn't exist, try to create a new one
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
           await handleUserSetup(newUserCredential.user);
         } catch (createError: any) {
           if (createError instanceof FirestorePermissionError) {
-            // Detailed error already thrown
             return;
           }
           toast({
@@ -140,7 +134,6 @@ export default function LoginPage() {
           });
         }
       } else {
-        // Handle other login errors
         toast({
           variant: "destructive",
           title: "Login Error",

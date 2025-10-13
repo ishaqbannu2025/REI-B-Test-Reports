@@ -3,7 +3,7 @@
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
 import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
@@ -16,7 +16,10 @@ export default function ViewReportsPage() {
   const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
 
   useEffect(() => {
-    if (!firestore || !user) return;
+    if (!user) {
+        setIsLoading(!user);
+        return
+    };
 
     const checkAdminStatus = async () => {
       try {
@@ -31,11 +34,11 @@ export default function ViewReportsPage() {
     };
 
     checkAdminStatus();
-  }, [firestore, user]);
-
+  }, [user]);
 
   useEffect(() => {
     if (!authCheckCompleted || !firestore || !user) return;
+    
     setIsLoading(true);
 
     const fetchReports = () => {
@@ -69,7 +72,6 @@ export default function ViewReportsPage() {
 
     fetchReports();
   }, [firestore, user, isAdmin, authCheckCompleted]);
-
 
   if (isLoading) {
     return <div>Loading reports...</div>;

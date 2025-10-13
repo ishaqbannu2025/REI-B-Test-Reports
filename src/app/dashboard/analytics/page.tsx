@@ -7,7 +7,7 @@ import { RecentReports } from '../components/recent-reports';
 import { Home, Factory, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, orderBy, getDocs, collectionGroup, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 export default function AnalyticsPage() {
@@ -18,9 +18,11 @@ export default function AnalyticsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
 
-
   useEffect(() => {
-    if (!firestore || !user) return;
+    if (!user) {
+        setIsLoading(!user);
+        return
+    };
 
     const checkAdminStatus = async () => {
       try {
@@ -28,29 +30,26 @@ export default function AnalyticsPage() {
         setIsAdmin(idTokenResult.claims.role === 'Admin');
       } catch (e) {
         console.error("Error checking admin status:", e);
-        setIsAdmin(false); // Default to non-admin on error
+        setIsAdmin(false);
       } finally {
         setAuthCheckCompleted(true);
       }
     };
 
     checkAdminStatus();
-  }, [firestore, user]);
-
+  }, [user]);
 
   useEffect(() => {
-    // This effect should wait until the admin check is complete
     if (!authCheckCompleted || !firestore || !user) return;
+    
     setIsLoading(true);
 
     const fetchReports = () => {
       let reportsQuery;
       
       if (isAdmin) {
-        // Admin: Query all reports in the collection group
         reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
       } else {
-        // Non-Admin: Query only their own reports
         reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
       }
       
