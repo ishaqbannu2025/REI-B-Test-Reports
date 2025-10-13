@@ -6,7 +6,7 @@ import {credential} from 'firebase-admin';
 
 // This function ensures that the Firebase Admin app is initialized only once.
 function getAdminApp(): App {
-  // If an app is already initialized, return it.
+  // If there are already initialized apps, return the default one.
   if (getApps().length > 0) {
     return getApp();
   }
@@ -20,14 +20,14 @@ function getAdminApp(): App {
 
 export async function POST(req: NextRequest) {
   try {
+    // Get the initialized Admin App instance *before* doing anything else.
+    const app = getAdminApp();
+
     const {uid} = await req.json();
     
     if (!uid) {
       return NextResponse.json({error: 'UID is required'}, {status: 400});
     }
-
-    // Get the initialized Admin App instance.
-    const app = getAdminApp();
 
     // Use the app instance to get the Auth service and set the custom claim.
     await getAuth(app).setCustomUserClaims(uid, {role: 'Admin'});
