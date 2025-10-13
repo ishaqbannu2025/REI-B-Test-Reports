@@ -4,31 +4,25 @@ import {initializeApp, getApp, App, getApps} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {credential} from 'firebase-admin';
 
-// Initialize a global promise to prevent re-initialization
-let adminAppPromise: Promise<App> | null = null;
+// Keep a cached instance of the admin app.
+let adminApp: App;
 
-const initializeAdminApp = (): Promise<App> => {
-  if (!adminAppPromise) {
-    adminAppPromise = new Promise((resolve) => {
-       // Check if the 'admin' app is already initialized.
-       const existingApp = getApps().find(app => app.name === 'admin');
-       if (existingApp) {
-         resolve(existingApp);
-       } else {
-         // If not initialized, create a new 'admin' app instance.
-         resolve(initializeApp(
-          {
-            // Use Application Default Credentials which are automatically
-            // available in the App Hosting environment.
-            credential: credential.applicationDefault(),
-          },
-          'admin' // Name the app 'admin' to avoid conflicts.
-        ));
-       }
-    });
+/**
+ * Initializes the Firebase Admin SDK, reusing the app instance if it already exists.
+ * This is the standard pattern for serverless environments like Next.js API routes.
+ */
+function getAdminApp(): App {
+  if (getApps().length > 0) {
+    return getApp();
   }
-  return adminAppPromise;
-};
+  
+  // Use Application Default Credentials which are automatically
+  // available in the App Hosting environment.
+  adminApp = initializeApp({
+    credential: credential.applicationDefault(),
+  });
+  return adminApp;
+}
 
 
 export async function POST(req: NextRequest) {
@@ -39,10 +33,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({error: 'UID is required'}, {status: 400});
     }
 
-    const adminApp = await initializeAdminApp();
+    const app = getAdminApp();
 
     // Set custom user claims on the server.
-    await getAuth(adminApp).setCustomUserClaims(uid, {role: 'Admin'});
+    await getAuth(app).setCustomUserClaims(uid, {role: 'Admin'});
 
     return NextResponse.json({message: `Success! Custom claim set for ${uid}`});
   } catch (error: any) {
