@@ -26,7 +26,8 @@ export default function AnalyticsPage() {
 
       try {
         // Get the user's ID token result to check for custom claims.
-        const idTokenResult = await user.getIdTokenResult(true); // Force refresh
+        // Force refresh to get the latest claims.
+        const idTokenResult = await user.getIdTokenResult(true);
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;
