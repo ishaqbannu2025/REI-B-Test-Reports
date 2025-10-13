@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -95,6 +96,7 @@ export default function LoginPage() {
         // Call the server-side function to set the claim.
         await setAdminClaim(firebaseUser.uid);
         // CRITICAL: Force a refresh of the token again to get the new claim immediately.
+        // This makes the client-side aware of the new role for subsequent requests.
         await firebaseUser.getIdToken(true);
         console.log("Token refreshed to apply new admin claim.");
       }
@@ -108,19 +110,14 @@ export default function LoginPage() {
     
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // After sign-in, run the setup which includes the admin check and claim logic.
       await handleUserSetup(userCredential.user);
       toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
-      // The useEffect will handle the redirect.
     } catch (error: any) {
-      // If user doesn't exist, try creating a new account for them.
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         try {
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
-          // After sign-up, run the setup.
           await handleUserSetup(newUserCredential.user);
           toast({ title: "Account Created", description: "Redirecting to dashboard..." });
-          // The useEffect will handle the redirect.
         } catch (createError: any) {
           toast({
             variant: "destructive",

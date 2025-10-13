@@ -25,7 +25,8 @@ export default function ViewReportsPage() {
       
       try {
         // Force a token refresh to get the latest custom claims.
-        const idTokenResult = await user.getIdTokenResult(true);
+        await user.getIdToken(true);
+        const idTokenResult = await user.getIdTokenResult();
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;

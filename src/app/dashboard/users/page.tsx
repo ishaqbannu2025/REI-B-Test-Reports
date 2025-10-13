@@ -1,3 +1,4 @@
+
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
@@ -22,7 +23,9 @@ export default function UsersPage() {
       setIsLoading(true);
 
       try {
-        const idTokenResult = await authUser.getIdTokenResult(true);
+        await authUser.getIdToken(true);
+        const idTokenResult = await authUser.getIdTokenResult();
+
         if (idTokenResult.claims.role !== 'Admin') {
             setIsAllowed(false);
             const contextualError = new FirestorePermissionError({
