@@ -6,7 +6,7 @@ import {credential} from 'firebase-admin';
 
 // This function ensures that the Firebase Admin app is initialized only once.
 function getAdminApp(): App {
-  // If the default app already exists, return it.
+  // If there are already initialized apps, return the default one.
   if (getApps().length > 0) {
     return getApp();
   }
