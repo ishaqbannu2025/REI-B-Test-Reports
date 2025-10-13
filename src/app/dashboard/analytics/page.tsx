@@ -1,4 +1,3 @@
-
 'use client';
 
 import { StatCard } from '../components/stat-card';
@@ -20,61 +19,59 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!user) {
-        setIsLoading(!user);
-        return
+      if(typeof user !== 'undefined') { // if user is null (logged out)
+        setIsLoading(false);
+      }
+      // if user is undefined, still loading
+      return;
     };
 
-    const checkAdminStatus = async () => {
+    const checkAdminAndFetchData = async () => {
+      setIsLoading(true);
       try {
         const idTokenResult = await user.getIdTokenResult();
-        setIsAdmin(idTokenResult.claims.role === 'Admin');
-      } catch (e) {
-        console.error("Error checking admin status:", e);
-        setIsAdmin(false);
-      } finally {
+        const isAdminUser = idTokenResult.claims.role === 'Admin';
+        setIsAdmin(isAdminUser);
         setAuthCheckCompleted(true);
-      }
-    };
 
-    checkAdminStatus();
-  }, [user]);
+        if (!firestore) {
+          setIsLoading(false);
+          return;
+        }
 
-  useEffect(() => {
-    if (!authCheckCompleted || !firestore || !user) return;
-    
-    setIsLoading(true);
-
-    const fetchReports = () => {
-      let reportsQuery;
-      
-      if (isAdmin) {
-        reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-      } else {
-        reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
-      }
-      
-      getDocs(reportsQuery)
-        .then(querySnapshot => {
-            const reports: TestReport[] = [];
-            querySnapshot.forEach(reportDoc => {
-                reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
-            });
-            setAllReports(reports);
-        })
-        .catch(serverError => {
-            const path = isAdmin ? 'testReports' : `users/${user.uid}/testReports`;
-            const permissionError = new FirestorePermissionError({
-              operation: 'list',
-              path: path,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        }).finally(() => {
-            setIsLoading(false);
+        let reportsQuery;
+        if (isAdminUser) {
+          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+        } else {
+          reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
+        }
+        
+        const querySnapshot = await getDocs(reportsQuery);
+        const reports: TestReport[] = [];
+        querySnapshot.forEach(reportDoc => {
+            reports.push({ id: reportDoc.id, ...reportDoc.data() } as TestReport);
         });
-    };
+        setAllReports(reports);
 
-    fetchReports();
-  }, [firestore, user, isAdmin, authCheckCompleted]);
+      } catch (serverError: any) {
+        if (serverError instanceof FirestorePermissionError) {
+          errorEmitter.emit('permission-error', serverError);
+        } else {
+          const path = isAdmin ? 'testReports' : `users/${user.uid}/testReports`;
+          const permissionError = new FirestorePermissionError({
+            operation: 'list',
+            path: path,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkAdminAndFetchData();
+
+  }, [user, firestore, isAdmin]); // Reruns when user or firestore instance is available. isAdmin is added to refetch if role changes.
   
   if (isLoading) {
     return <div>Loading Analytics...</div>
