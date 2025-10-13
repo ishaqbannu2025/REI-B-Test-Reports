@@ -1,11 +1,10 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
 import { DataTable } from "./components/data-table";
 import type { UserProfile } from '@/lib/types';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
+import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, getDocs } from 'firebase/firestore';
 
 export default function UsersPage() {
   const { firestore, user: authUser } = useFirebase();
@@ -23,8 +22,7 @@ export default function UsersPage() {
       setIsLoading(true);
 
       try {
-        await authUser.getIdToken(true);
-        const idTokenResult = await authUser.getIdTokenResult();
+        const idTokenResult = await authUser.getIdTokenResult(true);
 
         if (idTokenResult.claims.role !== 'Admin') {
             setIsAllowed(false);
