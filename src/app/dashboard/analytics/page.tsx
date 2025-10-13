@@ -1,3 +1,4 @@
+
 'use client';
 
 import { StatCard } from '../components/stat-card';
@@ -14,33 +15,23 @@ export default function AnalyticsPage() {
   const { user } = useUser();
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [authCheckCompleted, setAuthCheckCompleted] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      if(typeof user !== 'undefined') { // if user is null (logged out)
+    if (!user || !firestore) {
+      if(typeof user !== 'undefined') {
         setIsLoading(false);
       }
-      // if user is undefined, still loading
       return;
     };
 
-    const checkAdminAndFetchData = async () => {
+    const fetchReports = async () => {
       setIsLoading(true);
       try {
         const idTokenResult = await user.getIdTokenResult();
-        const isAdminUser = idTokenResult.claims.role === 'Admin';
-        setIsAdmin(isAdminUser);
-        setAuthCheckCompleted(true);
-
-        if (!firestore) {
-          setIsLoading(false);
-          return;
-        }
-
+        const isAdmin = idTokenResult.claims.role === 'Admin';
+        
         let reportsQuery;
-        if (isAdminUser) {
+        if (isAdmin) {
           reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         } else {
           reportsQuery = query(collection(firestore, `users/${user.uid}/testReports`), orderBy('entryDate', 'desc'));
@@ -54,24 +45,20 @@ export default function AnalyticsPage() {
         setAllReports(reports);
 
       } catch (serverError: any) {
-        if (serverError instanceof FirestorePermissionError) {
-          errorEmitter.emit('permission-error', serverError);
-        } else {
-          const path = isAdmin ? 'testReports' : `users/${user.uid}/testReports`;
+          const path = `testReports collection group`;
           const permissionError = new FirestorePermissionError({
             operation: 'list',
             path: path,
           });
           errorEmitter.emit('permission-error', permissionError);
-        }
       } finally {
         setIsLoading(false);
       }
     };
     
-    checkAdminAndFetchData();
+    fetchReports();
 
-  }, [user, firestore, isAdmin]); // Reruns when user or firestore instance is available. isAdmin is added to refetch if role changes.
+  }, [user, firestore]);
   
   if (isLoading) {
     return <div>Loading Analytics...</div>
