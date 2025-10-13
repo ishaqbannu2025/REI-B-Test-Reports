@@ -15,18 +15,16 @@ export default function ViewReportsPage() {
 
   useEffect(() => {
     const fetchReports = async () => {
-      // Ensure both user and firestore are available before proceeding.
+      // Wait until both user and firestore are available.
       if (!user || !firestore) {
-        setIsLoading(true); // Keep loading if dependencies are not ready
         return;
       }
       
       setIsLoading(true);
       
       try {
-        // Force a token refresh to get the latest custom claims.
-        await user.getIdToken(true);
-        const idTokenResult = await user.getIdTokenResult();
+        // Get the user's ID token result to check for custom claims.
+        const idTokenResult = await user.getIdTokenResult(true); // Force refresh to get latest claims
         const isAdmin = idTokenResult.claims.role === 'Admin';
         
         let reportsQuery;

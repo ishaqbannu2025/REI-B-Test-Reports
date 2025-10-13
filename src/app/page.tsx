@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -33,43 +32,35 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('m.ishaqbannu@gmail.com');
   const [password, setPassword] = useState('Innovation123');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
+    // Only redirect if authentication is not in a loading state and the user is confirmed.
     if (!isUserLoading && user) {
       router.push('/dashboard');
     }
   }, [user, isUserLoading, router]);
 
   const setAdminClaim = async (uid: string): Promise<void> => {
-    try {
-      const response = await fetch('/api/set-admin-claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to set admin claim.');
-      }
-      console.log(`Admin claim set request sent for UID: ${uid}`);
-    } catch (error) {
-      console.error("Error in setAdminClaim:", error);
-      toast({
-        variant: "destructive",
-        title: "Admin Setup Error",
-        description: "Could not set admin privileges on the server.",
-      });
+    const response = await fetch('/api/set-admin-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to set admin claim on the server.');
     }
+    console.log(`Admin claim set request sent for UID: ${uid}`);
   };
-
-  const handleUserSetup = async (firebaseUser: FirebaseUser) => {
-    if (!firestore) return;
+  
+  const handleUserSetup = async (firebaseUser: FirebaseUser): Promise<void> => {
+    if (!firestore) throw new Error("Firestore is not initialized.");
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
     const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
     
-    // Check if the user document already exists.
     const userDoc = await getDoc(userDocRef);
     const isNewUser = !userDoc.exists();
   
@@ -85,39 +76,41 @@ export default function LoginPage() {
       await setDoc(userDocRef, newUserProfile);
       console.log(`New user profile created for ${firebaseUser.uid}`);
     }
-
+  
     if (shouldBeAdmin) {
-      // Get current claims by forcing a token refresh
-      const idTokenResult = await firebaseUser.getIdTokenResult(true);
-      const isAlreadyAdmin = idTokenResult.claims.role === 'Admin';
-      
-      if (!isAlreadyAdmin) {
-        console.log(`User ${firebaseUser.uid} requires admin claim. Setting now...`);
-        // Call the server-side function to set the claim.
+      // Check if the claim is already present to avoid unnecessary server calls.
+      const initialToken = await firebaseUser.getIdTokenResult();
+      if (initialToken.claims.role !== 'Admin') {
+        console.log(`User ${firebaseUser.uid} requires 'Admin' claim. Setting now...`);
+        // 1. Call the server-side function to set the claim.
         await setAdminClaim(firebaseUser.uid);
-        // CRITICAL: Force a refresh of the token again to get the new claim immediately.
-        // This makes the client-side aware of the new role for subsequent requests.
+        // 2. CRITICAL: Force a refresh of the token to get the new claim immediately.
         await firebaseUser.getIdToken(true);
-        console.log("Token refreshed to apply new admin claim.");
+        console.log("Token refreshed to apply new 'Admin' claim on the client.");
       }
     }
+    // This promise resolves only after all setup is complete.
   };
-
+  
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
     
+    setIsProcessing(true);
+    
     try {
+      // First, try to sign in
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      toast({ title: "Login Successful", description: "Finalizing setup..." });
       await handleUserSetup(userCredential.user);
-      toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
     } catch (error: any) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        // If sign-in fails because the user doesn't exist, create a new account
         try {
+          toast({ title: "Creating Account", description: "Please wait..." });
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
           await handleUserSetup(newUserCredential.user);
-          toast({ title: "Account Created", description: "Redirecting to dashboard..." });
         } catch (createError: any) {
           toast({
             variant: "destructive",
@@ -126,12 +119,16 @@ export default function LoginPage() {
           });
         }
       } else {
+        // Handle other login errors
         toast({
           variant: "destructive",
           title: "Login Error",
           description: error.message,
         });
       }
+    } finally {
+      // The useEffect will handle the redirect once the user state is updated.
+      setIsProcessing(false);
     }
   };
   
@@ -164,6 +161,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={isProcessing}
               />
             </div>
             <div className="grid gap-2">
@@ -176,10 +174,11 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={isProcessing}
               />
             </div>
-            <Button type="submit" className="w-full">
-              Login or Sign Up
+            <Button type="submit" className="w-full" disabled={isProcessing}>
+              {isProcessing ? 'Please wait...' : 'Login or Sign Up'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
