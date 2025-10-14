@@ -26,6 +26,7 @@ export default function AnalyticsPage() {
       setIsLoading(true);
 
       try {
+        // Query only the current user's reports.
         const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
         const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
         

@@ -22,6 +22,8 @@ export default function UsersPage() {
       
       setIsLoading(true);
 
+      // Note: This query requires Firestore rules that allow listing users.
+      // For this app, we'll assume any authenticated user can see the list.
       try {
         const usersCollectionRef = collection(firestore, 'users');
         const q = query(usersCollectionRef);
