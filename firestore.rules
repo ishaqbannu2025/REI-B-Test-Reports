@@ -1,107 +1,109 @@
 /**
- * @fileoverview Firestore Security Rules for Test Report Management
+ * @fileoverview Firestore Security Rules for the application.
  *
  * Core Philosophy:
- * This ruleset enforces a user-ownership model for test reports,
- * combined with public read access to specific test report data.
+ * This ruleset enforces a user-ownership model for test reports, combined with
+ * a role-based access control for administrative functions. Users can only
+ * manage their own test reports, while admins have broader access for reporting and management.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profiles.
- * - /users/{userId}/testReports/{reportId}: Stores test reports owned by a specific user.
+ * - /users/{userId}: Stores user profile data, with 'userId' matching the Firebase Auth UID.
+ * - /users/{userId}/testReports/{reportId}: Stores individual test reports created by each user.
+ * - /testReports/{reportId}: Represents the documents within the 'testReports' collection group, not used directly for writing.
  *
  * Key Security Decisions:
- * - Users can only create, update, or delete their own test reports.
- * - Public read access is granted to the 'testReports' collection group, for specific fields of test reports.
- * - Listing all users is disallowed to protect user privacy.
+ * - User-owned data: Each user can only access their own data under /users/{userId}.
+ * - Admin role: The 'Admin' role grants broader access to test reports.
+ * - Collection Group: Rules are applied to the 'testReports' collection group to enable queries across all reports.
+ * - No public user listing: Listing users is not permitted.
  *
  * Denormalization for Authorization:
- * The `enteredBy` field in the TestReport entity is used to explicitly
- * link a test report to a specific user. This enables efficient ownership
- * checks without requiring additional database reads.
- *
- * Structural Segregation:
- * User profiles are stored in a private collection `/users/{userId}`, while
- * a subset of the test report data is made publicly accessible through
- * the 'testReports' collection group. This ensures that sensitive user data
- * is not exposed publicly.
+ * The 'TestReport' entity includes the `enteredBy` field, which stores the user ID of the report creator.
+ * This denormalization enables efficient owner-based access control without additional reads.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /**
+     * @description Checks if the request is authenticated.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /**
+     * @description Checks if the authenticated user's UID matches the provided userId.
+     */
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
+    /**
+     * @description Checks if the authenticated user is the owner of the existing document.
+     */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Secures user profile data. Users can only read and write their own profile.
-     * @path /users/{userId}
-     * @allow (create) User with UID 'user123' can create their own profile.
-     * @allow (get) User with UID 'user123' can read their own profile.
-     * @allow (update) User with UID 'user123' can update their own profile.
-     * @allow (delete) User with UID 'user123' can delete their own profile.
-     * @deny (create) User with UID 'user123' cannot create a profile for another user ('user456').
-     * @deny (get) User with UID 'user123' cannot read another user's profile ('user456').
-     * @deny (update) User with UID 'user123' cannot update another user's profile ('user456').
-     * @deny (delete) User with UID 'user123' cannot delete another user's profile ('user456').
-     * @principle Enforces document ownership for all operations.
+     * @description Checks if the authenticated user has the 'Admin' role.
      */
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false; // Prevent listing all users.
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+    function isAdmin() {
+      return request.auth.token.role == 'Admin';
     }
 
     /**
-     * @description Secures test reports within a user's subcollection.
-     * Users can create, read, update, and delete their own test reports.
-     * @path /users/{userId}/testReports/{reportId}
-     * @allow (create) User with UID 'user123' can create a test report in their own collection.
-     * @allow (get) User with UID 'user123' can read a test report in their own collection.
-     * @allow (update) User with UID 'user123' can update a test report in their own collection.
-     * @allow (delete) User with UID 'user123' can delete a test report in their own collection.
-     * @deny (create) User with UID 'user123' cannot create a test report in another user's collection ('user456').
-     * @deny (get) User with UID 'user123' cannot read a test report in another user's collection ('user456').
-     * @deny (update) User with UID 'user123' cannot update a test report in another user's collection ('user456').
-     * @deny (delete) User with UID 'user123' cannot delete a test report in another user's collection ('user456').
-     * @principle Enforces document ownership for writes, restricting access to a user's own data tree.
+     * @description Rules for user profile documents.
+     * @path /users/{userId}
+     * @allow (create) Authenticated user can create their own profile.
+     * @allow (get) Authenticated user can read their own profile.
+     * @allow (update) Authenticated user can update their own profile.
+     * @allow (delete) Authenticated user can delete their own profile.
+     * @deny (create) User tries to create a profile with a mismatched UID.
+     * @deny (get) User tries to read another user's profile.
+     * @principle Enforces document ownership for user profiles and restricts access to only the owner.
      */
-    match /users/{userId}/testReports/{reportId} {
+    match /users/{userId} {
       allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isSignedIn() && request.resource.data.enteredBy == request.auth.uid;
-      allow update: if isExistingOwner(userId) && request.resource.data.enteredBy == resource.data.enteredBy;
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.uid == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Grants public read access to the 'testReports' collection group.
-     * Allows listing and getting of test reports.
-     *  Note: This allows listing across all users, so only public data should be exposed.
+     * @description Rules for test reports collection group.
      * @path /testReports/{reportId}
-     * @allow (get) Any user can get a test report.
-     * @allow (list) Any user can list test reports.
-     * @deny (create) No one can directly create in this collection group.
-     * @deny (update) No one can directly update in this collection group.
-     * @deny (delete) No one can directly delete in this collection group.
-     * @principle Provides public read access while restricting writes.
+     * @allow (list) Admins can list all test reports. Users can list their own testReports
+     * @allow (get) Admins can get all test reports. Users can get their own testReports
+     * @deny (create) Non-admins cannot create test reports here directly (must be via user subcollection).
      */
     match /testReports/{reportId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+       allow get: if isAdmin() || (isSignedIn() && resource.data.enteredBy == request.auth.uid);
+       allow list: if isAdmin() || (isSignedIn() && resource.data.enteredBy == request.auth.uid);
+       allow create: if false;
+       allow update: if false;
+       allow delete: if false;
     }
+
+    /**
+     * @description Rules for test reports subcollection under each user.
+     * @path /users/{userId}/testReports/{reportId}
+     * @allow (create) Authenticated user can create a test report under their own profile.
+     * @allow (get) Authenticated user can read their own test report.
+     * @allow (update) Authenticated user can update their own test report.
+     * @allow (delete) Authenticated user can delete their own test report.
+     * @deny (create) User tries to create a test report with a mismatched userId.
+     * @deny (get) User tries to read another user's test report.
+     * @principle Enforces document ownership for test reports and restricts access to only the owner or admin.
+     */
+     match /users/{userId}/testReports/{reportId} {
+       allow get: if isOwner(userId);
+       allow list: if isOwner(userId);
+       allow create: if isOwner(userId) && request.resource.data.enteredBy == userId;
+       allow update: if isExistingOwner(userId) && request.resource.data.enteredBy == resource.data.enteredBy;
+       allow delete: if isExistingOwner(userId);
+     }
   }
 }
