@@ -6,7 +6,7 @@ import { RecentReports } from '../components/recent-reports';
 import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser } from '@/firebase';
-import { query, orderBy, getDocs, collection } from 'firebase/firestore';
+import { query, orderBy, onSnapshot, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
@@ -17,40 +17,34 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchReports = async () => {
-      if (!user || !firestore) {
-        setIsLoading(true);
-        return;
-      }
+    if (!user || !firestore) {
       setIsLoading(true);
+      return;
+    }
+    setIsLoading(true);
 
-      try {
-        // Query only the current user's reports.
-        const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
-        const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
-        
-        const querySnapshot = await getDocs(reportsQuery);
-        
+    // Query only the current user's reports.
+    const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
+    const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
+    
+    const unsubscribe = onSnapshot(reportsQuery, (querySnapshot) => {
         const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
           id: reportDoc.id,
           ...reportDoc.data()
         } as TestReport));
         
         setAllReports(reports);
-
-      } catch (error) {
+        setIsLoading(false);
+    }, (error) => {
         const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: `users/${user.uid}/testReports`,
         });
         errorEmitter.emit('permission-error', contextualError);
-      } finally {
         setIsLoading(false);
-      }
-    };
-    
-    fetchReports();
+    });
 
+    return () => unsubscribe();
   }, [user, firestore]);
   
   if (isLoading) {

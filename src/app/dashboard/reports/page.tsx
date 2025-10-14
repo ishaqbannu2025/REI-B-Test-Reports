@@ -1,4 +1,3 @@
-
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
@@ -21,7 +20,6 @@ export default function ViewReportsPage() {
     
     setIsLoading(true);
     
-    // Query only the reports belonging to the current user.
     const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
     const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
     
@@ -42,7 +40,6 @@ export default function ViewReportsPage() {
       setIsLoading(false);
     });
 
-    // Cleanup the listener when the component unmounts
     return () => unsubscribe();
 
   }, [user, firestore]); 
