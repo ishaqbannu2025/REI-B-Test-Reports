@@ -7,7 +7,7 @@ import { RecentReports } from '../components/recent-reports';
 import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
 import { useFirebase, useUser } from '@/firebase';
-import { query, orderBy, getDocs, collectionGroup } from 'firebase/firestore';
+import { query, orderBy, getDocs, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
@@ -26,8 +26,8 @@ export default function AnalyticsPage() {
       setIsLoading(true);
 
       try {
-        // Allow all logged-in users to see all reports for now.
-        const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
+        const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
+        const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
         
         const querySnapshot = await getDocs(reportsQuery);
         
@@ -41,7 +41,7 @@ export default function AnalyticsPage() {
       } catch (error) {
         const contextualError = new FirestorePermissionError({
           operation: 'list',
-          path: 'testReports (collection group)',
+          path: `users/${user.uid}/testReports`,
         });
         errorEmitter.emit('permission-error', contextualError);
       } finally {
@@ -76,25 +76,25 @@ export default function AnalyticsPage() {
           title="Total Reports"
           value={totalReports}
           icon={FileText}
-          description="Total number of reports filed"
+          description="Total number of reports filed by you"
         />
         <StatCard 
           title="Total Fees Collected"
           value={`Rs ${totalFees.toLocaleString()}`}
           icon={IndianRupee}
-          description="Sum of all government fees"
+          description="Sum of all government fees in your reports"
         />
         <StatCard 
           title="Domestic Reports"
           value={domesticReports}
           icon={Home}
-          description="Total domestic connections"
+          description="Total domestic connections by you"
         />
         <StatCard 
           title="Commercial & Industrial"
           value={commercialReports + industrialReports}
           icon={Building2}
-          description="Total business connections"
+          description="Total business connections by you"
         />
       </div>
       <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
