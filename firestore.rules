@@ -1,80 +1,106 @@
 /**
- * @fileoverview Firestore Security Rules for the electrical test report application.
+ * @fileoverview Firestore Security Rules for Electrical Test Reports App.
  *
  * Core Philosophy:
- * This ruleset enforces a user-ownership model for user profiles and allows public read access
- * to test reports while restricting write access to authorized users.
+ * This ruleset enforces a user-ownership model for test reports stored under each user's document.
+ * Admins have read access to all reports via collection group queries.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile information. 'userId' matches the Firebase Auth UID.
- * - /testReports/{reportId}: Stores electrical test reports.
+ * - /users/{userId}: Stores user profile information, with 'userId' matching the Firebase Auth UID.
+ * - /users/{userId}/testReports/{reportId}: Stores test reports created by a specific user.
  *
  * Key Security Decisions:
- * - Users can only read/write their own profile data.
- * - Listing of users is disallowed for privacy.
- * - Test reports are publicly readable but writable only by authorized users.
- * - Only authenticated users can create, update, or delete test reports.
- * - No schema validation is performed in this prototyping phase.
+ * - Users can only list their own test reports.
+ * - Admins can query all test reports using a collection group.
  *
- * Denormalization for Authorization:
- * The `TestReport` entity contains an `enteredBy` field, which is the user ID of the user who created the report.
- * This allows us to easily check ownership when updating or deleting reports.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Secure user profiles. Users can read and write their own profile data.
+     * @description Checks if the request is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's UID matches the provided userId.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user is an Admin.
+     * @details To use `isAdmin()`, you must configure custom claims via the Admin SDK.
+     */
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'Admin';
+    }
+    
+    /**
+     * @description Checks if the document exists and the authenticated user is the owner.
+     * @details This function combines the existence check with the ownership check.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+    
+    /**
+     * @description Defines access rules for user profiles.
      * @path /users/{userId}
-     * @allow (create) - An authenticated user can create their own profile if the userId matches their auth UID.
-     * @allow (get, update, delete) - An authenticated user can read/update/delete their own profile if the userId matches their auth UID.
-     * @deny (create) - An unauthenticated user cannot create a profile.
-     * @deny (get, update, delete) - An unauthenticated user cannot read/update/delete any profile.
-     * @deny (create) - A user cannot create a profile for another user (userId mismatch).
-     * @deny (update) - A user cannot update another user's profile (userId mismatch).
-     * @deny (delete) - A user cannot delete another user's profile (userId mismatch).
-     * @principle Enforces document ownership.
+     * @allow (create) - User with UID 'user123' can create their own profile.
+     * @allow (get) - User with UID 'user123' can read their own profile.
+     * @allow (update) - User with UID 'user123' can update their own profile.
+     * @allow (delete) - User with UID 'user123' can delete their own profile.
+     * @deny (create) - User with UID 'user456' cannot create a profile with ID 'user123'.
+     * @principle Enforces document ownership for writes; users can only manage their own profiles.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow list: if false; // Listing users is not permitted.
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isOwner(userId) && resource.data.uid == userId;
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Secure test reports. Publicly readable, writable only by authenticated users.
-     * @path /testReports/{reportId}
-     * @allow (get, list) - Any user can read test reports.
-     * @allow (create) - An authenticated user can create a test report. The 'enteredBy' field must match their auth UID.
-     * @allow (update, delete) - Only the user who created the report ('enteredBy' field) can update or delete it.
-     * @deny (create) - An unauthenticated user cannot create test reports.
-     * @deny (update, delete) - An unauthenticated user cannot update or delete test reports.
-     * @deny (create) - A user cannot create a test report with an 'enteredBy' field that doesn't match their auth UID.
-     * @deny (update) - A user cannot update a test report they don't own.
-     * @deny (delete) - A user cannot delete a test report they don't own.
-     * @principle Allows public read access with owner-only writes and validates relational integrity.
+     * @description Defines access rules for test reports within a user's document.
+     * @path /users/{userId}/testReports/{reportId}
+     * @allow (create) - User with UID 'user123' can create a test report under their profile.
+     * @allow (get) - User with UID 'user123' can read a test report under their profile.
+     * @allow (list) - User with UID 'user123' can list test reports under their profile.
+     * @allow (update) - User with UID 'user123' can update a test report under their profile.
+     * @allow (delete) - User with UID 'user123' can delete a test report under their profile.
+     * @deny (create) - User with UID 'user456' cannot create a test report under user 'user123'.
+     * @principle Enforces document ownership; users can only manage test reports associated with their profiles.
      */
-    match /testReports/{reportId} {
-      allow get, list: if true;
-      allow create: if isSignedIn() && request.resource.data.enteredBy == request.auth.uid;
-      allow update: if isExistingOwner(resource.data.enteredBy);
-      allow delete: if isExistingOwner(resource.data.enteredBy);
+    match /users/{userId}/testReports/{reportId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
-  }
 
-  // Helper Functions
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function isOwner(userId) {
-    return isSignedIn() && request.auth.uid == userId;
-  }
-
-  function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
+    /**
+     * @description Defines access rules for the 'testReports' collection group.
+     * @path /databases/{database}/documents/{anyPath}/testReports/{reportId}
+     * @allow (get) - Admins can read any test report through collection group queries.
+     * @allow (list) - Admins can list test reports through collection group queries.
+     * @deny (create) - Non-admins cannot create test reports via collection group.
+     * @deny (update) - Non-admins cannot update test reports via collection group.
+     * @deny (delete) - Non-admins cannot delete test reports via collection group.
+     * @principle Allows admins to query all test reports for reporting purposes.
+     */
+    match /{path=**}/testReports/{reportId} {
+        allow get: if isAdmin();
+        allow list: if isAdmin();
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+    }
   }
 }
