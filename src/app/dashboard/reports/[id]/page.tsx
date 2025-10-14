@@ -101,10 +101,6 @@ function ReportDetailPage({ params }: { params: { id: string } }) {
       </Card>
     </div>
   );
-<<<<<<< HEAD
-}
-=======
 }
 
 export default ReportDetailPage;
->>>>>>> 76ed993 (committed)
