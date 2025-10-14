@@ -25,6 +25,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
+
 export default function LoginPage() {
   const router = useRouter();
   const { auth, firestore } = useFirebase();
@@ -55,20 +56,7 @@ export default function LoginPage() {
         setIsProcessing(false);
       });
     }
-  }, [user, isUserLoading, isSetupComplete]);
-
-
-  const setAdminClaim = async (uid: string): Promise<void> => {
-    const response = await fetch('/api/set-admin-claim', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid }),
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to set admin claim on the server.');
-    }
-  };
+  }, [user, isUserLoading, isSetupComplete, isProcessing]);
   
   const handleUserSetup = async (firebaseUser: FirebaseUser): Promise<void> => {
     if (!firestore) throw new Error("Firestore is not initialized.");
@@ -80,6 +68,7 @@ export default function LoginPage() {
     setProcessingMessage("Checking user profile...");
     const userDoc = await getDoc(userDocRef);
     
+    // Create user profile if it doesn't exist
     if (!userDoc.exists()) {
       setProcessingMessage("Creating user profile...");
       const newUserProfile = {
@@ -92,17 +81,12 @@ export default function LoginPage() {
       };
       await setDoc(userDocRef, newUserProfile);
     }
-  
-    if (shouldBeAdmin) {
-      const initialToken = await firebaseUser.getIdTokenResult();
-      if (initialToken.claims.role !== 'Admin') {
-          setProcessingMessage("Setting Admin Role...");
-          await setAdminClaim(firebaseUser.uid);
-          // CRITICAL: Force refresh the token *after* setting the claim to get the latest claims.
-          setProcessingMessage("Verifying Admin Role...");
-          await firebaseUser.getIdToken(true); 
-      }
-    }
+
+    // Force a token refresh to get the latest claims from the user profile,
+    // which might have been set by a backend process after creation.
+    setProcessingMessage("Verifying user role...");
+    await firebaseUser.getIdToken(true);
+    
     setProcessingMessage("Setup Complete.");
   };
   
