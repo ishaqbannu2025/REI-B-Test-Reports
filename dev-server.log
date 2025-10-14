@@ -63,3 +63,11 @@ Error: Route "/dashboard/reports/[id]" used `params.id`. `params` should be awai
  ✓ Compiled /api/get-report in 376ms
  GET /api/get-report?uin=GbXvqNBaKrOZqCT6GmCA 404 in 886ms
  GET /dashboard/reports 200 in 79ms
+ GET /api/get-report?uin=GbXvqNBaKrOZqCT6GmCA&debug=1 404 in 678ms
+ GET /api/get-report?uin=GbXvqNBaKrOZqCT6GmCA&debug=1 404 in 639ms
+ GET /api/get-report?uin=GbXvqNBaKrOZqCT6GmCA&debug=1 404 in 600ms
+ GET /api/get-report?uin=GbXvqNBaKrOZqCT6GmCA&debug=1 404 in 689ms
+ ✓ Compiled /api/search-reports in 36ms
+ GET /api/search-reports?uin=GbXvqNBaKrOZqCT6GmCA 500 in 630ms
+ GET /api/search-reports?uin=GbXvqNBaKrOZqCT6GmCA 500 in 1996ms
+[2025-10-14T16:37:34.599Z]  @firebase/firestore: Firestore (11.9.0): GrpcConnection RPC 'Listen' stream 0x243efbc9 error. Code: 1 Message: 1 CANCELLED: Disconnecting idle stream. Timed out waiting for new targets.
