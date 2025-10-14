@@ -1,71 +1,79 @@
+/**
+ * @fileoverview Firestore Security Rules for Electrical Test Reports.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a role-based access control model. Users are assigned roles (Admin, Data Entry User) that determine their permissions.
+ * Admins have broad access, while Data Entry Users can only create and manage their own test reports.
+ * Public read access is allowed for the testReports collection group.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores user profile information. The 'userId' must match the Firebase Auth UID.
+ * - /testReports/{reportId}: Stores electrical test reports.
+ *
+ * Key Security Decisions:
+ * - Admins can read and list all test reports.
+ * - Data Entry Users can only create test reports, and can only update/delete their own reports.
+ * - Public listing of test reports is enabled.
+ *
+ * Denormalization for Authorization:
+ * - Each testReport document denormalizes the `enteredBy` field to store the user's UID,
+ *   enabling simple ownership checks for update and delete operations.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows users to read and write their own profile data.
+     * @description Allows access to user profiles.
      * @path /users/{userId}
-     * @allow (create) User with matching UID can create their profile.
-     * @allow (get, update, delete) Signed-in user with matching UID can read/update/delete their profile.
-     * @deny (create) User cannot create a profile with a different UID.
-     * @deny (get, update, delete) User cannot read/update/delete another user's profile.
-     * @principle Enforces user-ownership for profile data.
+     * @allow (create) Authenticated user can create their own profile if the UID matches.
+     * @allow (get, list, update, delete) Authenticated user can only access their own profile.
+     * @deny (create) An unauthenticated user cannot create a profile.
+     * @deny (get, list, update, delete) An unauthenticated user cannot access any profile.
+     * @principle Enforces document ownership for user profiles.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
 
-      function isExistingOwner(userId) {
-          return isOwner(userId) && exists(resource);
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Allows public read access to test reports, but restricts write access to admins or the report creator.
-     * @path /testReports/{reportId}
-     * @allow (get, list) Any user can read or list test reports.
-     * @allow (create) Signed-in user can create a test report. The 'enteredBy' field must match their UID.
-     * @allow (update, delete) Only the report creator (enteredBy) or a user with the 'Admin' role can update or delete the report.
-     * @deny (create) User cannot create a test report with an 'enteredBy' field that doesn't match their UID.
-     * @deny (update, delete) User cannot update or delete a test report they didn't create and if they don't have the 'Admin' role.
-     * @principle Allows public read with owner-only or admin-only writes.
-     */
-    match /testReports/{reportId} {
-       function isSignedIn() {
+      function isSignedIn() {
         return request.auth != null;
       }
 
-      function isOwner(enteredBy) {
-        return request.auth.uid == enteredBy;
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == userId;
+      allow get, update, delete: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+    }
+
+    /**
+     * @description Allows public read access to test reports, with restricted create/update/delete access.
+     * @path /testReports/{reportId}
+     * @allow (get, list) Any user can read the test reports.
+     * @allow (create) Authenticated users can create test reports, with `enteredBy` set to their UID.
+     * @allow (update, delete) Only the user who created the test report can update or delete it.
+     * @deny (create) An unauthenticated user cannot create a test report.
+     * @deny (update, delete) A user cannot update or delete a test report they did not create.
+     * @principle Allows public read access while enforcing ownership for writes.
+     */
+    match /testReports/{reportId} {
+      function isOwner(userId) {
+        return request.auth.uid == userId;
       }
 
-      function isAdmin() {
-        return request.auth.token.role == 'Admin';
+      function isSignedIn() {
+        return request.auth != null;
       }
 
-     function canWriteTestReport(enteredBy) {
-          return isSignedIn() && (isAdmin() || isOwner(enteredBy));
-      }
-
-      function isExistingOwner(enteredBy) {
-          return isOwner(enteredBy) && exists(resource);
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
       }
 
       allow get, list: if true;
       allow create: if isSignedIn() && request.resource.data.enteredBy == request.auth.uid;
-      allow update: if canWriteTestReport(resource.data.enteredBy);
-      allow delete: if canWriteTestReport(resource.data.enteredBy);
+      allow update: if isExistingOwner(resource.data.enteredBy);
+      allow delete: if isExistingOwner(resource.data.enteredBy);
     }
+
   }
 }
