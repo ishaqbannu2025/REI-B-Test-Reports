@@ -5,7 +5,7 @@ import { CategoryChart } from '../components/category-chart';
 import { RecentReports } from '../components/recent-reports';
 import { Home, Building2, FileText, IndianRupee } from 'lucide-react';
 import type { TestReport } from '@/lib/types';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, useMemoFirebase } from '@/firebase';
 import { query, orderBy, onSnapshot, collection } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
@@ -15,16 +15,19 @@ export default function AnalyticsPage() {
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const reportsQuery = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
+  }, [user, firestore]);
+
   useEffect(() => {
-    if (!user || !firestore) {
-      setIsLoading(true);
+    if (!reportsQuery) {
+      setIsLoading(false);
       return;
     }
+    
     setIsLoading(true);
 
-    const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
-    const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
-    
     const unsubscribe = onSnapshot(reportsQuery, (querySnapshot) => {
         const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
           id: reportDoc.id,
@@ -36,14 +39,14 @@ export default function AnalyticsPage() {
     }, (error) => {
         const contextualError = new FirestorePermissionError({
           operation: 'list',
-          path: `users/${user.uid}/testReports`,
+          path: `users/${user?.uid}/testReports`,
         });
         errorEmitter.emit('permission-error', contextualError);
         setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user, firestore]);
+  }, [reportsQuery, user]);
   
   if (isLoading) {
     return <div>Loading Analytics...</div>

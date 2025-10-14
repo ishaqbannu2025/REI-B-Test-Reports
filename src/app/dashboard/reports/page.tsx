@@ -1,7 +1,7 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase } from '@/firebase';
+import { useFirebase, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
@@ -12,16 +12,18 @@ export default function ViewReportsPage() {
   const [myReports, setMyReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const reportsQuery = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
+  }, [user, firestore]);
+
   useEffect(() => {
-    if (!user || !firestore) {
-      setIsLoading(true);
+    if (!reportsQuery) {
+      setIsLoading(false);
       return;
     }
     
     setIsLoading(true);
-    
-    const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
-    const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
     
     const unsubscribe = onSnapshot(reportsQuery, (querySnapshot) => {
       const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
@@ -34,7 +36,7 @@ export default function ViewReportsPage() {
     }, (error) => {
       const contextualError = new FirestorePermissionError({
         operation: 'list',
-        path: `users/${user.uid}/testReports`,
+        path: `users/${user?.uid}/testReports`,
       });
       errorEmitter.emit('permission-error', contextualError);
       setIsLoading(false);
@@ -42,7 +44,7 @@ export default function ViewReportsPage() {
 
     return () => unsubscribe();
 
-  }, [user, firestore]); 
+  }, [reportsQuery, user]); 
 
 
   if (isLoading) {

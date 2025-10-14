@@ -1,4 +1,3 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { columns } from "./components/columns";
@@ -12,6 +11,7 @@ export default function UsersPage() {
   const { user: authUser } = useUser();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -21,9 +21,8 @@ export default function UsersPage() {
       }
       
       setIsLoading(true);
+      setError(null);
 
-      // Note: This query requires Firestore rules that allow listing users.
-      // For this app, we'll assume any authenticated user can see the list.
       try {
         const usersCollectionRef = collection(firestore, 'users');
         const q = query(usersCollectionRef);
@@ -41,7 +40,8 @@ export default function UsersPage() {
             } as UserProfile;
           });
         setUsers(fetchedUsers);
-      } catch (error) {
+      } catch (e: any) {
+         setError("You don't have permission to view users.");
          const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'users',
@@ -58,6 +58,10 @@ export default function UsersPage() {
 
   if (isLoading) {
     return <div>Loading user data...</div>;
+  }
+  
+  if (error) {
+      return <div className="text-destructive">{error}</div>
   }
 
   return (
