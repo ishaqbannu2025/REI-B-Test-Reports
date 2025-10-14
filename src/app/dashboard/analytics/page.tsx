@@ -11,8 +11,7 @@ import { useEffect, useState } from 'react';
 import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 export default function AnalyticsPage() {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user } = useFirebase();
   const [allReports, setAllReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,7 +22,6 @@ export default function AnalyticsPage() {
     }
     setIsLoading(true);
 
-    // Query only the current user's reports.
     const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
     const reportsQuery = query(userReportsCollection, orderBy('entryDate', 'desc'));
     
