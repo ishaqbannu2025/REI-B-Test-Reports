@@ -23,18 +23,8 @@ export default function ViewReportsPage() {
       setIsLoading(true);
       
       try {
-        // Force refresh the token to get the latest claims, including the 'Admin' role.
-        const idTokenResult = await user.getIdTokenResult(true);
-        const isAdmin = idTokenResult.claims.role === 'Admin';
-        
-        let reportsQuery;
-        if (isAdmin) {
-          // If admin, query the entire collection group for all reports.
-          reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
-        } else {
-          // If not admin, query only the reports created by the current user.
-          reportsQuery = query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
-        }
+        // Allow all logged-in users to see all reports for now.
+        const reportsQuery = query(collectionGroup(firestore, 'testReports'), orderBy('entryDate', 'desc'));
         
         const querySnapshot = await getDocs(reportsQuery);
         

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -34,14 +35,12 @@ const navItems: NavItem[] = [
   { href: '/dashboard/reports/new', title: 'Add Test Report', icon: PlusCircle },
   { href: '/dashboard/reports', title: 'View Reports', icon: BookCopy },
   { href: '/dashboard/analytics', title: 'Analytics', icon: BarChart2 },
-  { href: '/dashboard/users', title: 'User Management', icon: Users, adminOnly: true },
+  { href: '/dashboard/users', title: 'User Management', icon: Users, adminOnly: false },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user } = useUser();
-  // Mock role for demo, replace with actual role from user object
-  const userRole = user ? 'Admin' : 'Data Entry User';
 
   const handleLogout = () => {
     getAuth().signOut();
@@ -61,7 +60,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <DropdownMenuLabel>Navigation</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {navItems.map((item) => {
-              if (item.adminOnly && userRole !== 'Admin') {
+              if (item.adminOnly && !user) { // Simplified check
                 return null;
               }
               const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));

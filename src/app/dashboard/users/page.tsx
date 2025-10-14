@@ -12,7 +12,6 @@ export default function UsersPage() {
   const { user: authUser } = useUser();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -24,36 +23,23 @@ export default function UsersPage() {
       setIsLoading(true);
 
       try {
-        const idTokenResult = await authUser.getIdTokenResult(true);
+        const usersCollectionRef = collection(firestore, 'users');
+        const q = query(usersCollectionRef);
+        const querySnapshot = await getDocs(q);
 
-        if (idTokenResult.claims.role !== 'Admin') {
-            setIsAllowed(false);
-            const contextualError = new FirestorePermissionError({
-              operation: 'list',
-              path: 'users',
-            });
-            errorEmitter.emit('permission-error', contextualError);
-        } else {
-            setIsAllowed(true);
-            const usersCollectionRef = collection(firestore, 'users');
-            const q = query(usersCollectionRef);
-            const querySnapshot = await getDocs(q);
-
-            const fetchedUsers = querySnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                  id: doc.id,
-                  uid: doc.id,
-                  displayName: data.displayName || data.email,
-                  email: data.email,
-                  role: data.role || 'Data Entry User',
-                  photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
-                } as UserProfile;
-              });
-            setUsers(fetchedUsers);
-        }
+        const fetchedUsers = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              uid: doc.id,
+              displayName: data.displayName || data.email,
+              email: data.email,
+              role: data.role || 'Data Entry User',
+              photoURL: data.photoURL || `https://i.pravatar.cc/150?u=${data.email}`,
+            } as UserProfile;
+          });
+        setUsers(fetchedUsers);
       } catch (error) {
-         setIsAllowed(false);
          const contextualError = new FirestorePermissionError({
           operation: 'list',
           path: 'users',
@@ -70,15 +56,6 @@ export default function UsersPage() {
 
   if (isLoading) {
     return <div>Loading user data...</div>;
-  }
-  
-  if (!isAllowed) {
-      return (
-        <div>
-            <h1 className="text-2xl font-semibold mb-4">User Management</h1>
-            <p className="text-destructive">You do not have permission to view this page.</p>
-        </div>
-      )
   }
 
   return (
