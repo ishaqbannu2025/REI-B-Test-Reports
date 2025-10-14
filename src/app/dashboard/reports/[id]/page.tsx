@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Printer, ArrowLeft } from 'lucide-react';
 import { Logo } from '@/components/logo';
-import { useFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { doc, getDoc, collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
@@ -13,33 +13,38 @@ import { useEffect, useState } from 'react';
 export default function ReportDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { id } = params; // This ID is the UIN
+  const { id: reportId } = params; // This is the document ID
   const { firestore } = useFirebase();
+  const { user } = useUser();
   const [report, setReport] = useState<TestReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!firestore || typeof id !== 'string') return;
+    if (!firestore || !user || typeof reportId !== 'string') {
+        setIsLoading(false);
+        return;
+    }
 
     const findReport = async () => {
       setIsLoading(true);
-      // Since we don't know the user, we have to do a collection group query.
-      // This is less efficient but necessary when the URL doesn't contain the user ID.
-      const reportsRef = collectionGroup(firestore, 'testReports');
-      const q = query(reportsRef, where('uin', '==', id));
+      // We assume the user can only view their own reports.
+      // This is enforced by security rules.
+      const reportRef = doc(firestore, 'users', user.uid, 'testReports', reportId);
       
       try {
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const doc = querySnapshot.docs[0];
-          setReport({...(doc.data() as TestReport), id: doc.id });
+        const docSnap = await getDoc(reportRef);
+        if (docSnap.exists()) {
+          setReport({...(docSnap.data() as TestReport), id: docSnap.id });
         } else {
+          // If it doesn't exist in the user's collection, try a public query.
+          // This path might be for public verification or an admin viewing another user's report.
+          // For simplicity now, we just assume not found if not in user's own reports.
           setReport(null);
         }
       } catch (error) {
         const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: `testReports where uin == ${id}`, // Approximate path for logging
+          operation: 'get',
+          path: reportRef.path,
         });
         errorEmitter.emit('permission-error', contextualError);
         setReport(null);
@@ -49,7 +54,7 @@ export default function ReportDetailPage() {
     };
 
     findReport();
-  }, [firestore, id]);
+  }, [firestore, reportId, user]);
 
 
   if (isLoading) {
@@ -191,3 +196,5 @@ export default function ReportDetailPage() {
     </div>
   );
 }
+
+    

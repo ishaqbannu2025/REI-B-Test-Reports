@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
-import { Timestamp, doc, deleteDoc } from "firebase/firestore"
+import { Timestamp, doc } from "firebase/firestore"
 import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { deleteDocumentNonBlocking, useFirebase, FirestorePermissionError, errorEmitter } from "@/firebase"
+import { deleteDocumentNonBlocking, useFirebase } from "@/firebase"
 import { useToast } from "@/hooks/use-toast"
 import React from "react"
 import { useRouter } from "next/navigation"
@@ -42,32 +42,23 @@ const ReportActions = ({ report }: { report: TestReport }) => {
     if (!firestore) return;
 
     // Reports are stored at /users/{userId}/testReports/{reportId}
-    // The report ID is the UIN
     const reportRef = doc(firestore, `users/${report.enteredBy}/testReports/${report.id}`);
     
-    deleteDoc(reportRef).catch((error) => {
-      const contextualError = new FirestorePermissionError({
-          operation: 'delete',
-          path: reportRef.path,
-        });
-      errorEmitter.emit('permission-error', contextualError);
-      toast({
-          variant: "destructive",
-          title: "Deletion Failed",
-          description: "You don't have permission to delete this report.",
-        });
-    });
+    // We use the non-blocking delete function which handles errors via the global emitter.
+    deleteDocumentNonBlocking(reportRef);
 
     toast({
       title: "Report Deletion Scheduled",
       description: `Report with UIN ${report.uin} will be deleted.`,
     });
-    // Optimistically remove from UI or wait for listener update
-    // For now, we rely on a page refresh or a listener to update the table.
+
+    // We can rely on the real-time listener on the reports page to update the UI.
+    // Or force a refresh if listeners are not used everywhere.
     router.refresh();
   };
 
   const handleEdit = () => {
+    // The link should point to the document ID, not the UIN.
     router.push(`/dashboard/reports/${report.id}/edit`);
   };
 
@@ -83,6 +74,7 @@ const ReportActions = ({ report }: { report: TestReport }) => {
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuItem asChild>
+             {/* The link should point to the document ID, not the UIN. */}
             <Link href={`/dashboard/reports/${report.id}`}>
               View Details & Print
             </Link>
@@ -194,3 +186,5 @@ export const columns: ColumnDef<TestReport>[] = [
     },
   },
 ]
+
+    

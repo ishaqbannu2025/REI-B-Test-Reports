@@ -1,4 +1,3 @@
-
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -29,12 +28,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
 import { useFirebase, useUser } from '@/firebase';
 import {
-  collectionGroup,
-  query,
-  where,
-  getDocs,
   doc,
   updateDoc,
+  getDoc,
 } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -57,13 +53,14 @@ const formSchema = z.object({
   remarks: z.string().optional(),
 });
 
+// The page parameter is '[id]', which in our case is the Firestore document ID, not the UIN.
 export default function EditReportPage() {
   const { toast } = useToast();
   const { firestore } = useFirebase();
   const { user } = useUser();
   const params = useParams();
   const router = useRouter();
-  const { id: uin } = params; // This is the UIN
+  const { id: reportId } = params; // This is the document ID
   const [report, setReport] = useState<TestReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -72,7 +69,8 @@ export default function EditReportPage() {
   });
 
    useEffect(() => {
-    if (!firestore || typeof uin !== 'string') {
+    // We need user and firestore to fetch the document.
+    if (!firestore || !user || typeof reportId !== 'string') {
       setIsLoading(false);
       return;
     }
@@ -80,13 +78,11 @@ export default function EditReportPage() {
     const findReport = async () => {
       setIsLoading(true);
       try {
-        const reportsRef = collectionGroup(firestore, 'testReports');
-        const q = query(reportsRef, where('uin', '==', uin));
-        
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const doc = querySnapshot.docs[0];
-          const reportData = { ...(doc.data() as TestReport), id: doc.id };
+        const reportRef = doc(firestore, 'users', user.uid, 'testReports', reportId);
+        const docSnap = await getDoc(reportRef);
+
+        if (docSnap.exists()) {
+          const reportData = { ...(docSnap.data() as TestReport), id: docSnap.id };
           setReport(reportData);
 
           const challanDate = reportData.challanDate;
@@ -112,15 +108,14 @@ export default function EditReportPage() {
             governmentFee: reportData.governmentFee || 0,
             sanctionedLoad: reportData.sanctionedLoad?.toString() || '',
           });
-
         } else {
-          setReport(null);
+          setReport(null); // Report not found in the current user's collection
         }
       } catch (error) {
         console.error("Error fetching report for editing:", error);
         const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: `testReports where uin == ${uin}`,
+          operation: 'get',
+          path: `users/${user.uid}/testReports/${reportId}`,
         });
         errorEmitter.emit('permission-error', contextualError);
         setReport(null);
@@ -130,7 +125,7 @@ export default function EditReportPage() {
     };
 
     findReport();
-  }, [firestore, uin, form, user]);
+  }, [firestore, reportId, form, user]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!firestore || !user || !report) {
@@ -138,6 +133,7 @@ export default function EditReportPage() {
       return;
     }
     
+    // We use the original report object which contains the enteredBy field.
     const reportRef = doc(firestore, 'users', report.enteredBy, 'testReports', report.id);
     
     const updateData = {
@@ -145,14 +141,13 @@ export default function EditReportPage() {
         challanDate: values.challanDate ? new Date(values.challanDate) : new Date()
     };
     
-    try {
-        await updateDoc(reportRef, updateData);
+    updateDoc(reportRef, updateData).then(() => {
         toast({
           title: 'Report Updated',
           description: `Report with UIN ${values.uin} has been successfully updated.`,
         });
         router.push('/dashboard/reports');
-    } catch(error) {
+    }).catch((error) => {
         const contextualError = new FirestorePermissionError({
           operation: 'update',
           path: reportRef.path,
@@ -164,7 +159,7 @@ export default function EditReportPage() {
           title: "Update Failed",
           description: "You don't have permission to edit this report.",
         });
-    }
+    });
   }
 
   if (isLoading) {
@@ -407,3 +402,5 @@ export default function EditReportPage() {
     </Card>
   );
 }
+
+    
