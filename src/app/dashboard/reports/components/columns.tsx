@@ -79,7 +79,7 @@ const ReportActions = ({ report }: { report: TestReport }) => {
               View Details & Print
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleEdit}>Edit Report</DropdownMenuItem>
+          <DropdownMenuItem>Edit Report</DropdownMenuItem>
           <DropdownMenuSeparator />
           <AlertDialogTrigger asChild>
             <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
@@ -110,73 +110,61 @@ const ReportActions = ({ report }: { report: TestReport }) => {
 export const columns: ColumnDef<TestReport>[] = [
   {
     accessorKey: "uin",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          UIN
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      )
-    },
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        UIN
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
   },
   {
     accessorKey: "applicantName",
     header: "Applicant Name",
   },
   {
+    accessorKey: "shortAddress",
+    header: "Short Address",
+  },
+  {
     accessorKey: "category",
     header: "Category",
     cell: ({ row }) => {
-      const category = row.getValue("category") as TestReportCategory
+      const category = row.getValue("category") as TestReportCategory;
       return <Badge variant={
         category === 'Domestic' ? 'secondary' :
         category === 'Commercial' ? 'outline' : 'default'
-      }>{category}</Badge>
+      }>{category}</Badge>;
     },
-    filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id))
-    },
+    filterFn: (row, id, value) => value.includes(row.getValue(id)),
   },
   {
     accessorKey: "district",
     header: "District",
-     filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id))
-    },
+    filterFn: (row, id, value) => value.includes(row.getValue(id)),
+  },
+  {
+    accessorKey: "sanctionedLoad",
+    header: "Sanction Load",
   },
   {
     accessorKey: "governmentFee",
     header: () => <div className="text-right">Fee (Rs)</div>,
     cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("governmentFee"))
-      const formatted = new Intl.NumberFormat("en-IN").format(amount)
-      return <div className="text-right font-medium">{formatted}</div>
+      const amount = parseFloat(row.getValue("governmentFee"));
+      const formatted = new Intl.NumberFormat("en-IN").format(amount);
+      return <div className="text-right font-medium">{formatted}</div>;
     },
   },
   {
-    accessorKey: "entryDate",
-    header: "Entry Date",
-    cell: ({ row }) => {
-      const dateValue = row.getValue("entryDate");
-      // Firestore Timestamps can come in as objects, so we need to convert them.
-      const date = (dateValue as any).toDate ? (dateValue as any).toDate() : new Date(dateValue as string);
-      return <div>{date.toLocaleDateString()}</div>
-    },
-    filterFn: (row, id, value) => {
-      const date = (row.getValue(id) as any).toDate ? (row.getValue(id) as any).toDate() : new Date(row.getValue(id) as string);
-      const { from, to } = value as DateRange;
-      if (from && !to) {
-        return date >= from;
-      } else if (!from && to) {
-        return date <= to;
-      } else if (from && to) {
-        return date >= from && date <= to;
-      }
-      return true;
-    },
+    accessorKey: "challanNo",
+    header: "Challan No.",
+  },
+  {
+    accessorKey: "challanDate",
+    header: "Challan Date",
   },
   {
     id: "actions",

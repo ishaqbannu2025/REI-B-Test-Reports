@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -169,10 +170,22 @@ export default function EditReportPage() {
   if (!report) {
       return notFound();
   }
+=======
+import { notFound } from 'next/navigation';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { useParams } from 'next/navigation';
+
+export default function EditReportPage() {
+  const params = useParams();
+  const { id } = params;
+
+  // TODO: Fetch report data by id and allow editing
+>>>>>>> 76ed993 (committed)
 
   return (
     <Card>
       <CardHeader>
+<<<<<<< HEAD
         <CardTitle>Edit Test Report</CardTitle>
         <CardDescription>Update the details for report with UIN: <span className="font-mono bg-muted p-1 rounded">{report.uin}</span></CardDescription>
       </CardHeader>
@@ -398,9 +411,18 @@ export default function EditReportPage() {
             </div>
           </form>
         </Form>
+=======
+        <CardTitle>Edit Report {id}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div>Report editing form goes here.</div>
+>>>>>>> 76ed993 (committed)
       </CardContent>
     </Card>
   );
 }
+<<<<<<< HEAD
 
     
+=======
+>>>>>>> 76ed993 (committed)

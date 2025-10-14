@@ -105,6 +105,7 @@ export function DataTable<TData, TValue>({
         [
           "UIN",
           "Applicant Name",
+            "Address",
           "Category",
           "District",
           "Fee (Rs)",
@@ -118,6 +119,7 @@ export function DataTable<TData, TValue>({
         return [
           report.uin,
           report.applicantName,
+            report.shortAddress,
           report.category,
           report.district,
           report.governmentFee.toLocaleString(),
@@ -136,6 +138,7 @@ export function DataTable<TData, TValue>({
       return {
         UIN: report.uin,
         "Applicant Name": report.applicantName,
+          Address: report.shortAddress,
         Category: report.category,
         District: report.district,
         "Fee (Rs)": report.governmentFee,
