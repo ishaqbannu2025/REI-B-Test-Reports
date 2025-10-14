@@ -1,4 +1,3 @@
-
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
@@ -15,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
-import { Timestamp, doc } from "firebase/firestore"
+import { Timestamp, doc, deleteDoc } from "firebase/firestore"
 import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
@@ -28,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { deleteDocumentNonBlocking, useFirebase } from "@/firebase"
+import { deleteDocumentNonBlocking, useFirebase, FirestorePermissionError, errorEmitter } from "@/firebase"
 import { useToast } from "@/hooks/use-toast"
 import React from "react"
 import { useRouter } from "next/navigation"
@@ -43,20 +42,33 @@ const ReportActions = ({ report }: { report: TestReport }) => {
     if (!firestore) return;
 
     // Reports are stored at /users/{userId}/testReports/{reportId}
-    // report.id is the UIN, which is used as the document ID.
-    // report.enteredBy is the userId.
+    // The report ID is the UIN
     const reportRef = doc(firestore, `users/${report.enteredBy}/testReports/${report.id}`);
     
-    deleteDocumentNonBlocking(reportRef);
+    deleteDoc(reportRef).catch((error) => {
+      const contextualError = new FirestorePermissionError({
+          operation: 'delete',
+          path: reportRef.path,
+        });
+      errorEmitter.emit('permission-error', contextualError);
+      toast({
+          variant: "destructive",
+          title: "Deletion Failed",
+          description: "You don't have permission to delete this report.",
+        });
+    });
 
     toast({
-      title: "Report Deleted",
-      description: `Report with UIN ${report.uin} has been scheduled for deletion.`,
+      title: "Report Deletion Scheduled",
+      description: `Report with UIN ${report.uin} will be deleted.`,
     });
+    // Optimistically remove from UI or wait for listener update
+    // For now, we rely on a page refresh or a listener to update the table.
+    router.refresh();
   };
 
   const handleEdit = () => {
-    router.push(`/dashboard/reports/${report.uin}/edit`);
+    router.push(`/dashboard/reports/${report.id}/edit`);
   };
 
   return (
@@ -71,7 +83,7 @@ const ReportActions = ({ report }: { report: TestReport }) => {
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuItem asChild>
-            <Link href={`/dashboard/reports/${report.uin}`}>
+            <Link href={`/dashboard/reports/${report.id}`}>
               View Details & Print
             </Link>
           </DropdownMenuItem>

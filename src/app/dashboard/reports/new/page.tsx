@@ -28,14 +28,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
-import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useUser } from '@/firebase';
 import {
   collection,
   query,
   where,
   getCountFromServer,
   serverTimestamp,
-  doc,
+  addDoc,
 } from 'firebase/firestore';
 
 const formSchema = z.object({
@@ -81,12 +81,9 @@ export default function NewReportPage() {
     const uin = e.target.value;
     form.setValue('uin', uin);
 
-    if (firestore && user && uin) {
-      // For global UIN uniqueness, we need a collection group query.
-      // This requires a specific index in Firestore.
-      // For now, we'll just check within the current user's reports to avoid permission issues.
-      const userReportsRef = collection(firestore, 'users', user.uid, 'testReports');
-      const q = query(userReportsRef, where('uin', '==', uin));
+    if (firestore && uin) {
+      const reportsRef = collection(firestore, 'testReports');
+      const q = query(reportsRef, where('uin', '==', uin));
       const snapshot = await getCountFromServer(q);
       setUinExists(snapshot.data().count > 0);
     } else {
@@ -110,21 +107,29 @@ export default function NewReportPage() {
 
     const reportData = {
         ...values,
+        id: values.uin, // using uin as id
         entryDate: serverTimestamp(),
         enteredBy: user.uid,
     };
     
-    // The only write operation is to the user's own subcollection.
-    // The document ID is the unique UIN.
-    const userReportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
-    setDocumentNonBlocking(userReportRef, reportData, { merge: true });
+    try {
+        const userReportsCollection = collection(firestore, 'users', user.uid, 'testReports');
+        await addDoc(userReportsCollection, reportData);
 
-    toast({
-      title: 'Report Submitted',
-      description: `Report with UIN ${values.uin} has been successfully created.`,
-    });
-    form.reset();
-    setUinExists(false);
+        toast({
+        title: 'Report Submitted',
+        description: `Report with UIN ${values.uin} has been successfully created.`,
+        });
+        form.reset();
+        setUinExists(false);
+    } catch (error) {
+        console.error("Error adding document: ", error);
+        toast({
+            variant: "destructive",
+            title: "Submission Error",
+            description: "Could not save the report. Please try again.",
+        });
+    }
   }
 
   return (

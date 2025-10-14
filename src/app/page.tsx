@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -35,126 +34,77 @@ export default function LoginPage() {
   const [email, setEmail] = useState('m.ishaqbannu@gmail.com');
   const [password, setPassword] = useState('Innovation123');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingMessage, setProcessingMessage] = useState('Please wait...');
-  const [isSetupComplete, setIsSetupComplete] = useState(false);
 
-  // Effect to redirect the user if they are logged in and setup is complete.
+  // Redirect if user is already logged in
   useEffect(() => {
-    if (user && !isUserLoading && isSetupComplete) {
+    if (user && !isUserLoading) {
       router.push('/dashboard');
     }
-  }, [user, isUserLoading, isSetupComplete, router]);
+  }, [user, isUserLoading, router]);
 
-  // Effect to handle users who are already logged in (e.g., on page refresh).
-  // It triggers the setup and role verification process.
-  useEffect(() => {
-    if (user && !isUserLoading && !isProcessing && !isSetupComplete) {
-      // Don't use a loading screen message, just process in the background.
-      setIsProcessing(true);
-      handleUserSetup(user).then(() => {
-        setIsSetupComplete(true);
-        setIsProcessing(false);
-      });
-    }
-  }, [user, isUserLoading, isSetupComplete, isProcessing]);
   
-  const handleUserSetup = async (firebaseUser: FirebaseUser): Promise<void> => {
+  const handleUserSetup = async (firebaseUser: FirebaseUser) => {
     if (!firestore) throw new Error("Firestore is not initialized.");
   
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-    const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
-    
-    setProcessingMessage("Checking user profile...");
     const userDoc = await getDoc(userDocRef);
     
-    // Create user profile if it doesn't exist
+    // Create user profile only if it doesn't exist
     if (!userDoc.exists()) {
-      setProcessingMessage("Creating user profile...");
+      const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
+      const role = adminEmails.includes(firebaseUser.email || '') ? 'Admin' : 'Data Entry User';
+      
       const newUserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
         photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
-        role: shouldBeAdmin ? 'Admin' : 'Data Entry User',
+        role: role,
         createdAt: serverTimestamp(),
       };
       await setDoc(userDocRef, newUserProfile);
     }
-
-    // Force a token refresh to get the latest claims from the user profile,
-    // which might have been set by a backend process after creation.
-    setProcessingMessage("Verifying user role...");
-    await firebaseUser.getIdToken(true);
-    
-    setProcessingMessage("Setup Complete.");
   };
   
-  const handleLogin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (isProcessing) return;
 
     setIsProcessing(true);
-    setProcessingMessage('Logging in...');
-
-    let currentUser: FirebaseUser | null = null;
     
     try {
+      // Try to sign in first
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      currentUser = userCredential.user;
+      await handleUserSetup(userCredential.user);
+      router.push('/dashboard');
+
     } catch (error: any) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        // If user not found, try to create a new account
         try {
-          toast({ title: "User not found. Creating new account...", description: "This may take a moment..." });
-          setProcessingMessage('Creating Account...');
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          currentUser = userCredential.user;
+          toast({ title: "User not found. Creating new account...", description: "Please wait..." });
+          const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
+          await handleUserSetup(newUserCredential.user);
+          router.push('/dashboard');
         } catch (createError: any) {
           toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
-          setIsProcessing(false);
-          return;
         }
       } else {
         toast({ variant: "destructive", title: "Login Error", description: error.message });
-        setIsProcessing(false);
-        return;
       }
-    }
-
-    if (currentUser) {
-        try {
-            await handleUserSetup(currentUser);
-            setIsSetupComplete(true); // This will trigger the useEffect to redirect.
-        } catch(setupError: any) {
-            toast({
-              variant: "destructive",
-              title: "Setup Error",
-              description: setupError.message,
-            });
-            setIsProcessing(false); // Stop processing on error.
-        }
-    } else {
-       setIsProcessing(false);
+    } finally {
+        setIsProcessing(false);
     }
   };
   
-  // Display a loading message if Firebase is still determining the initial user state,
-  // or if we are actively processing a login/setup.
-  if (isUserLoading || isProcessing) {
+  if (isUserLoading || user) {
       return (
         <div className="flex min-h-screen items-center justify-center">
-          <p>{processingMessage}</p>
+          <p>Loading...</p>
         </div>
       )
   }
-  
-  // If the user is logged in and setup is complete, the useEffect will handle the redirect.
-  // We can show a redirecting message in the meantime.
-  if (user && isSetupComplete) {
-      return <div className="flex min-h-screen items-center justify-center"><p>Redirecting to dashboard...</p></div>;
-  }
 
-  // Default state: user is not logged in, show the login form.
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
       <div className="flex items-center justify-center py-12">
@@ -176,6 +126,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={isProcessing}
               />
             </div>
             <div className="grid gap-2">
@@ -188,10 +139,11 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={isProcessing}
               />
             </div>
-            <Button type="submit" className="w-full">
-              Login or Sign Up
+            <Button type="submit" className="w-full" disabled={isProcessing}>
+              {isProcessing ? "Please wait..." : "Login or Sign Up"}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
