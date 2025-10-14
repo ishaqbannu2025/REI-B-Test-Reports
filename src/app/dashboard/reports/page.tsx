@@ -18,7 +18,7 @@ export default function ViewReportsPage() {
   }, [user, firestore]);
 
   useEffect(() => {
-    if (!reportsQuery) {
+    if (!reportsQuery || !user) {
       setIsLoading(false);
       return;
     }
@@ -36,7 +36,7 @@ export default function ViewReportsPage() {
     }, (error) => {
       const contextualError = new FirestorePermissionError({
         operation: 'list',
-        path: `users/${user?.uid}/testReports`,
+        path: `users/${user.uid}/testReports`,
       });
       errorEmitter.emit('permission-error', contextualError);
       setIsLoading(false);
