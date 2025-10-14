@@ -14,16 +14,15 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
-import { useFirebase, useUser } from '@/firebase';
+import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import {
-  signInWithEmailAndPassword,
+import { 
+  signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
-
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,69 +30,122 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [email, setEmail] = useState('m.ishaqbannu@gmail.com');
+  const [email, setEmail] = useState('admin@example.gov');
   const [password, setPassword] = useState('Innovation123');
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Redirect if user is already logged in
   useEffect(() => {
-    if (user && !isUserLoading) {
+    if (!isUserLoading && user) {
       router.push('/dashboard');
     }
   }, [user, isUserLoading, router]);
 
-  
-  const handleUserSetup = async (firebaseUser: FirebaseUser) => {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-  
-    const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    const userDoc = await getDoc(userDocRef);
-    
-    // Create user profile only if it doesn't exist
-    if (!userDoc.exists()) {
-      const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-      const role = adminEmails.includes(firebaseUser.email || '') ? 'Admin' : 'Data Entry User';
-      
-      const newUserProfile = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
-        photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
-        role: role,
-        createdAt: serverTimestamp(),
-      };
-      await setDoc(userDocRef, newUserProfile);
-    }
+  const setAdminClaim = async (uid: string) => {
+    // This function will call our new API route to set a custom claim.
+    await fetch('/api/set-admin-claim', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ uid }),
+    });
   };
-  
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isProcessing) return;
 
-    setIsProcessing(true);
+  const handleUserSetup = async (firebaseUser: FirebaseUser) => {
+    if (!firestore) return;
+
+    const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     
     try {
-      // Try to sign in first
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      await handleUserSetup(userCredential.user);
-      router.push('/dashboard');
+      const userDoc = await getDoc(userDocRef);
 
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        // If user not found, try to create a new account
-        try {
-          toast({ title: "User not found. Creating new account...", description: "Please wait..." });
-          const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
-          await handleUserSetup(newUserCredential.user);
-          router.push('/dashboard');
-        } catch (createError: any) {
-          toast({ variant: "destructive", title: "Sign-Up Error", description: createError.message });
+      if (!userDoc.exists()) {
+        const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
+        const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
+
+        const newUserProfile = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+          photoURL: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.email}`,
+          role: isInitialAdmin ? 'Admin' : 'Data Entry User',
+        };
+
+        // Create document with proper error handling
+        await setDoc(userDocRef, newUserProfile)
+          .catch(error => {
+            const contextualError = new FirestorePermissionError({
+              operation: 'create',
+              path: userDocRef.path,
+              requestResourceData: newUserProfile,
+            });
+            errorEmitter.emit('permission-error', contextualError);
+            throw contextualError; // Re-throw to be caught by the outer try/catch
+          });
+
+        if (isInitialAdmin) {
+            await setAdminClaim(firebaseUser.uid);
+             // Force refresh the token to get the new claim
+            await firebaseUser.getIdToken(true);
         }
       } else {
-        toast({ variant: "destructive", title: "Login Error", description: error.message });
+        // If user exists, check if they are an admin and ensure claim is set
+        const userData = userDoc.data();
+        if (userData.role === 'Admin') {
+          await setAdminClaim(firebaseUser.uid);
+          await firebaseUser.getIdToken(true);
+        }
       }
-    } finally {
-        setIsProcessing(false);
+    } catch(error) {
+       if (error instanceof FirestorePermissionError) {
+         // Already handled, just re-throw or handle as needed
+         throw error;
+       }
+       // Catch errors from getDoc
+       const contextualError = new FirestorePermissionError({
+         operation: 'get',
+         path: userDocRef.path,
+       });
+       errorEmitter.emit('permission-error', contextualError);
+       throw contextualError;
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth) return;
+    
+    try {
+      // First, try to sign in
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await handleUserSetup(userCredential.user);
+    } catch (error: any) {
+      if (error instanceof FirestorePermissionError) {
+        // The detailed error is already thrown and will be displayed by the error boundary
+        return;
+      }
+
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        // If user doesn't exist, try to create a new one
+        try {
+          const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
+          await handleUserSetup(newUserCredential.user);
+        } catch (createError: any) {
+          if (createError instanceof FirestorePermissionError) {
+            // Detailed error already thrown
+            return;
+          }
+          toast({
+            variant: "destructive",
+            title: "Sign-Up Error",
+            description: createError.message,
+          });
+        }
+      } else {
+        // Handle other login errors
+        toast({
+          variant: "destructive",
+          title: "Login Error",
+          description: error.message,
+        });
+      }
     }
   };
   
@@ -126,7 +178,6 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isProcessing}
               />
             </div>
             <div className="grid gap-2">
@@ -139,11 +190,10 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={isProcessing}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isProcessing}>
-              {isProcessing ? "Please wait..." : "Login or Sign Up"}
+            <Button type="submit" className="w-full">
+              Login
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
