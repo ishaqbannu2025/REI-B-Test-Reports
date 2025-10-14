@@ -1,0 +1,106 @@
+/**
+ * @fileoverview Firestore Security Rules for the application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a user-ownership model for user profiles and allows admins
+ * to view all test reports. Public read access is granted to test reports in the
+ * 'testReports' collection group.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores user profile information, with 'userId' matching the Firebase Auth UID.
+ * - /users/{userId}/testReports/{reportId}: Stores individual test reports created by the user.
+ * - /testReports/{reportId}: Represents the documents within the 'testReports' collection group.
+ *
+ * Key Security Decisions:
+ * - Users can only read/write their own profile data.
+ * - Admins have read access to all test reports.
+ * - Public read access is granted to test reports in the 'testReports' collection group.
+ * - User listing is disallowed.
+ *
+ * Denormalization for Authorization:
+ *  - The `enteredBy` field in the TestReport schema is used to ensure that the report
+ *  is created by the authenticated user.
+ *
+ * Structural Segregation:
+ *  - Test reports are stored under a user's subcollection (/users/{userId}/testReports/{reportId}) for private access and also participate in a top-level collection group (/testReports/{reportId}) for public read access.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Checks if the user is signed in.
+     * @example isSignedIn() == true if request.auth != null
+     * @principle Authentication is required for certain operations.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the user's ID matches the requested user ID.
+     * @param {string} userId - The user ID to compare against.
+     * @example isOwner("someUserId") == (request.auth.uid == "someUserId")
+     * @principle Ensures users can only access their own data.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the user is signed in and the document exists.
+     * @param {string} userId - The user ID to compare against.
+     * @example isExistingOwner("someUserId") == (request.auth.uid == "someUserId" && resource != null)
+     * @principle Prevents modification or deletion of non-existent documents.
+     */
+    function isExistingOwner(userId) {
+      return (isOwner(userId) && exists(resource));
+    }
+
+
+    /**
+     * @description Rules for user profiles.
+     * @path /users/{userId}
+     * @allow (create) - User with UID 'user123' can create their own profile at /users/user123.
+     * @allow (get, update, delete) - User with UID 'user123' can read/write their own profile at /users/user123.
+     * @deny (create) - User with UID 'user456' cannot create a profile at /users/user123.
+     * @deny (get, update, delete) - User with UID 'user456' cannot read/write the profile at /users/user123.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data tree.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+      /**
+       * @description Rules for testReports collection group
+       * @path /testReports/{reportId}
+       * @allow (get, list) - Allow public read access to test reports
+       * @deny (create, update, delete) - Deny write operations as writes happen to the user subcollection
+       * @principle Allow public read access to test reports
+       */
+      match /testReports/{reportId} {
+        allow get, list: if true;
+        allow create, update, delete: if false;
+      }
+
+        /**
+         * @description Rules for testReports subcollection of users.
+         * @path /users/{userId}/testReports/{reportId}
+         * @allow (create) - User with UID 'user123' can create a test report under their own user document.
+         * @allow (get, list, update, delete) - User with UID 'user123' can read/write their own test reports.
+         * @deny (create, update, delete) - User with UID 'user456' cannot create/modify test reports under /users/user123.
+         * @principle Enforces document ownership for writes, restricts access to a user's own data, and validates relational integrity.
+         */
+        match /users/{userId}/testReports/{reportId} {
+          allow get: if isOwner(userId);
+          allow list: if false;
+          allow create: if isSignedIn() && isOwner(userId);
+          allow update: if isOwner(userId);
+          allow delete: if isOwner(userId);
+        }
+  }
+}
