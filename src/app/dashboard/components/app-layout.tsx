@@ -39,9 +39,11 @@ const navItems: NavItem[] = [
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || '';
   const { user } = useUser();
-  const isAdmin = user?.role === 'Admin' || user?.email === 'm.ishaqbannu@gmail.com';
+  // `user` shape may be flexible; avoid strict typing assumptions here.
+  const userAny = user as any;
+  const isAdmin = (userAny?.role === 'Admin') || userAny?.email === 'm.ishaqbannu@gmail.com';
 
   const handleLogout = () => {
     getAuth().signOut();

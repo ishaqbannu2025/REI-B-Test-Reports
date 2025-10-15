@@ -87,10 +87,13 @@ export default function EditReportClient({ reportId }: Props) {
           const challanDate = reportData.challanDate;
           let formattedChallanDate = '';
           if (challanDate) {
-            if (challanDate instanceof Timestamp) {
-              formattedChallanDate = format(challanDate.toDate(), 'yyyy-MM-dd');
-            } else if (challanDate instanceof Date) {
-              formattedChallanDate = format(challanDate, 'yyyy-MM-dd');
+            // Firestore Timestamp objects expose a toDate() function. Use feature
+            // detection to avoid relying on instanceof which can fail across
+            // module boundaries.
+            if ((challanDate as any)?.toDate) {
+              formattedChallanDate = format((challanDate as any).toDate(), 'yyyy-MM-dd');
+            } else if ((challanDate as any) instanceof Date) {
+              formattedChallanDate = format(challanDate as Date, 'yyyy-MM-dd');
             } else if (typeof challanDate === 'string') {
               try {
                 formattedChallanDate = format(parseISO(challanDate), 'yyyy-MM-dd');

@@ -114,8 +114,8 @@ export function DataTable<TData, TValue>({
       ],
       body: table.getRowModel().rows.map((row) => {
         const report = row.original as TestReport;
-        const dateValue = report.entryDate;
-        const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue as string);
+  const dateValue = report.entryDate as any;
+  const date = dateValue?.toDate ? dateValue.toDate() : new Date(String(dateValue));
         return [
           report.uin,
           report.applicantName,
@@ -133,8 +133,8 @@ export function DataTable<TData, TValue>({
   const handleExportExcel = () => {
     const worksheetData = table.getRowModel().rows.map((row) => {
       const report = row.original as TestReport;
-      const dateValue = report.entryDate;
-      const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue as string);
+  const dateValue = report.entryDate as any;
+  const date = dateValue?.toDate ? dateValue.toDate() : new Date(String(dateValue));
       return {
         UIN: report.uin,
         "Applicant Name": report.applicantName,

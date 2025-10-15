@@ -48,9 +48,9 @@ export const columns: ColumnDef<UserProfile>[] = [
     id: "actions",
     cell: ({ row, table }) => {
       const user = row.original;
-      // Get current user from table options meta
-      const currentUser = table.options?.meta?.currentUser;
-      const isAdmin = currentUser?.role === 'Admin' || currentUser?.email === 'm.ishaqbannu@gmail.com';
+  // Get current user from table options meta (meta has flexible shape)
+  const currentUser = (table.options?.meta as any)?.currentUser as any;
+  const isAdmin = currentUser?.role === 'Admin' || currentUser?.email === 'm.ishaqbannu@gmail.com';
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
