@@ -1,7 +1,9 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /* Note: removed `output: 'export'` so Next can server-render dynamic routes and preserve API routes.
+     Keep other options below. If you intentionally need a fully static export, we can revert and
+     adjust the app to not rely on API routes or runtime server rendering. */
   typescript: {
     ignoreBuildErrors: true,
   },

@@ -46,9 +46,11 @@ export const columns: ColumnDef<UserProfile>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => {
-      const user = row.original
-
+    cell: ({ row, table }) => {
+      const user = row.original;
+  // Get current user from table options meta (meta has flexible shape)
+  const currentUser = (table.options?.meta as any)?.currentUser as any;
+  const isAdmin = currentUser?.role === 'Admin' || currentUser?.email === 'm.ishaqbannu@gmail.com';
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -59,13 +61,13 @@ export const columns: ColumnDef<UserProfile>[] = [
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem disabled>Edit User</DropdownMenuItem>
-            <DropdownMenuItem disabled>Change Role</DropdownMenuItem>
+            <DropdownMenuItem disabled={!isAdmin}>Edit User</DropdownMenuItem>
+            <DropdownMenuItem disabled={!isAdmin}>Change Role</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive" disabled>Remove User</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" disabled={!isAdmin}>Remove User</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      )
+      );
     },
   },
 ]

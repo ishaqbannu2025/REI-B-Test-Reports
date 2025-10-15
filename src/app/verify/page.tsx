@@ -129,7 +129,13 @@ export default function VerifyPage() {
                 <p>{report.district}</p>
 
                 <p className="font-semibold">Entry Date:</p>
-                <p>{report.entryDate.toLocaleDateString()}</p>
+                <p>{
+                  report.entryDate instanceof Date
+                    ? report.entryDate.toLocaleDateString()
+                    : (report.entryDate as any)?.toDate
+                    ? (report.entryDate as any).toDate().toLocaleDateString()
+                    : String(report.entryDate)
+                }</p>
 
                 <p className="font-semibold">Status:</p>
                 <p className="text-green-600 font-semibold">Verified</p>

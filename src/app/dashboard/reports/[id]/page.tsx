@@ -1,31 +1,55 @@
-import { notFound } from 'next/navigation';
+"use client";
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Logo } from '@/components/logo';
-import type { TestReport } from '@/lib/types';
-import { testReports } from '@/lib/data';
 
-// Required for static export: generateStaticParams
-export async function generateStaticParams() {
-  // TODO: Replace with actual UINs from your data source
-  return [
-    { id: 'REI-BNU-2025-0012' },
-    { id: 'REI-BNU-2025-0013' },
-    // Add more UINs as needed
-  ];
-}
+type Report = any;
 
-function ReportDetailPage({ params }: { params: { id: string } }) {
-  // For static export, use static data only
-  const report = testReports.find((r) => r.uin === params.id);
-  if (!report) {
-    notFound();
-  }
-  const getReportDate = (date: Date | string | { toDate?: () => Date }) => {
+export default function ReportDetailClient({ params }: { params: { id: string } }) {
+  const { id: uin } = params;
+  const [report, setReport] = useState<Report | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/get-report?uin=${encodeURIComponent(uin)}`);
+        if (res.status === 404) {
+          router.replace('/dashboard/reports');
+          return;
+        }
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error || 'Failed to fetch report');
+        }
+        const data = await res.json();
+        setReport(data);
+      } catch (err: any) {
+        setError(err.message || String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReport();
+  }, [uin, router]);
+
+  if (loading) return <div>Loading report...</div>;
+  if (error) return <div className="text-red-600">Error: {error}</div>;
+  if (!report) return <div>Report not found.</div>;
+
+  const getReportDate = (date: any) => {
+    if (!date) return '';
     if (typeof date === 'string') return new Date(date).toLocaleDateString();
+    if (date?.seconds) return new Date(date.seconds * 1000).toLocaleDateString();
     if (date instanceof Date) return date.toLocaleDateString();
-    if (typeof date === 'object' && date && typeof date.toDate === 'function') return date.toDate().toLocaleDateString();
     return '';
   };
+
   return (
     <div className="max-w-4xl mx-auto">
       <Card id="print-section" className="p-2 sm:p-6 print-container">
@@ -74,7 +98,7 @@ function ReportDetailPage({ params }: { params: { id: string } }) {
             <div className="md:col-span-2 my-2 border-t"></div>
             <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Government Fee (Rs)</span>
-              <span className="text-base">Rs {report.governmentFee.toLocaleString()}</span>
+              <span className="text-base">Rs {Number(report.governmentFee || 0).toLocaleString()}</span>
             </div>
             <div className="flex flex-col">
               <span className="font-semibold text-muted-foreground">Challan No. / Date</span>
@@ -102,5 +126,3 @@ function ReportDetailPage({ params }: { params: { id: string } }) {
     </div>
   );
 }
-
-export default ReportDetailPage;

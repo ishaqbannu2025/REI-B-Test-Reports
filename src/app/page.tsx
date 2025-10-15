@@ -30,7 +30,7 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [email, setEmail] = useState('admin@example.gov');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('Innovation123');
 
   useEffect(() => {
@@ -57,8 +57,8 @@ export default function LoginPage() {
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
-        const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-        const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
+  const adminEmails = ['m.ishaqbannu@gmail.com'];
+  const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
 
         const newUserProfile = {
           uid: firebaseUser.uid,
@@ -111,10 +111,22 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
-    
+    if (email === 'admin@example.gov') {
+      toast({
+        variant: 'destructive',
+        title: 'Login Disabled',
+        description: 'This user is disabled. Please use your own credentials.',
+      });
+      return;
+    }
     try {
       // First, try to sign in
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Always set m.ishaqbannu@gmail.com as Admin
+      if (userCredential.user.email === 'm.ishaqbannu@gmail.com') {
+        await setAdminClaim(userCredential.user.uid);
+        await userCredential.user.getIdToken(true);
+      }
       await handleUserSetup(userCredential.user);
     } catch (error: any) {
       if (error instanceof FirestorePermissionError) {

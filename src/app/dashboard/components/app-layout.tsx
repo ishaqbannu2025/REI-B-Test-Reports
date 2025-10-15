@@ -35,12 +35,15 @@ const navItems: NavItem[] = [
   { href: '/dashboard/reports/new', title: 'Add Test Report', icon: PlusCircle },
   { href: '/dashboard/reports', title: 'View Reports', icon: BookCopy },
   { href: '/dashboard/analytics', title: 'Analytics', icon: BarChart2 },
-  { href: '/dashboard/users', title: 'User Management', icon: Users, adminOnly: false },
+  { href: '/dashboard/users', title: 'User Management', icon: Users, adminOnly: true },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || '';
   const { user } = useUser();
+  // `user` shape may be flexible; avoid strict typing assumptions here.
+  const userAny = user as any;
+  const isAdmin = (userAny?.role === 'Admin') || userAny?.email === 'm.ishaqbannu@gmail.com';
 
   const handleLogout = () => {
     getAuth().signOut();
@@ -60,7 +63,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <DropdownMenuLabel>Navigation</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {navItems.map((item) => {
-              if (item.adminOnly && !user) { // Simplified check
+              if (item.adminOnly && !isAdmin) {
                 return null;
               }
               const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));

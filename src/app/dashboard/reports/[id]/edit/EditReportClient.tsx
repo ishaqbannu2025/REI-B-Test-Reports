@@ -25,20 +25,18 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useState, useEffect } from 'react';
+import { useFirebase, useUser } from '@/firebase';
 import {
-  collection,
-  collectionGroup,
-  query,
-  where,
-  getCountFromServer,
   doc,
-  setDoc,
-  serverTimestamp,
+  updateDoc,
+  getDoc,
 } from 'firebase/firestore';
+import type { TestReport } from '@/lib/types';
+import { notFound, useRouter } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
+import { Timestamp } from 'firebase/firestore';
+import { FirestorePermissionError, errorEmitter } from '@/firebase';
 
 const formSchema = z.object({
   uin: z.string().min(1, 'UIN is required.'),
@@ -55,153 +53,143 @@ const formSchema = z.object({
   remarks: z.string().optional(),
 });
 
-export default function NewReportPage() {
+export default function EditReportClient({ reportId }: { reportId: string }) {
   const { toast } = useToast();
   const { firestore } = useFirebase();
   const { user } = useUser();
-  const [uinExists, setUinExists] = useState(false);
+  const router = useRouter();
+  const [report, setReport] = useState<TestReport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      uin: '',
-      applicantName: '',
-      shortAddress: '',
-      district: 'Bannu',
-      category: 'Domestic',
-      sanctionedLoad: '',
-      proposedTransformer: 'No',
-      governmentFee: 0,
-      challanNo: '',
-      challanDate: '',
-      electricalContractorName: '',
-      remarks: '',
-    },
   });
 
-  async function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const uin = e.target.value;
-    form.setValue('uin', uin);
+   useEffect(() => {
+    if (!firestore || !user || typeof reportId !== 'string') {
+      setIsLoading(false);
+      return;
+    }
 
-    if (firestore && uin) {
-      // Check for duplicates across all users using a collection group query
-      const reportsRef = collectionGroup(firestore, 'testReports');
-      const q = query(reportsRef, where('uin', '==', uin));
+    const findReport = async () => {
+      setIsLoading(true);
       try {
-        const snapshot = await getCountFromServer(q);
-        setUinExists(snapshot.data().count > 0);
+        const reportRef = doc(firestore, 'users', user.uid, 'testReports', reportId);
+        const docSnap = await getDoc(reportRef);
+
+        if (docSnap.exists()) {
+          const reportData = { ...(docSnap.data() as TestReport), id: docSnap.id };
+          setReport(reportData);
+
+          const challanDate = reportData.challanDate;
+          let formattedChallanDate = '';
+          if (challanDate) {
+            if (challanDate instanceof Timestamp) {
+              formattedChallanDate = format(challanDate.toDate(), 'yyyy-MM-dd');
+            } else if (challanDate instanceof Date) {
+              formattedChallanDate = format(challanDate, 'yyyy-MM-dd');
+            } else if (typeof challanDate === 'string') {
+              try {
+                formattedChallanDate = format(parseISO(challanDate), 'yyyy-MM-dd');
+              } catch {
+                formattedChallanDate = challanDate;
+              }
+            }
+          }
+
+          form.reset({
+            ...reportData,
+            challanDate: formattedChallanDate,
+            remarks: reportData.remarks || '',
+            governmentFee: reportData.governmentFee || 0,
+            sanctionedLoad: reportData.sanctionedLoad?.toString() || '',
+          });
+        } else {
+          setReport(null);
+        }
       } catch (error) {
-        // This can fail if the required index is not created yet.
-        // We will emit an error but not block the user.
-        console.error("Error checking UIN:", error);
-         const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: 'testReports (collection group)',
+        console.error("Error fetching report for editing:", error);
+        const contextualError = new FirestorePermissionError({
+          operation: 'get',
+          path: `users/${user.uid}/testReports/${reportId}`,
         });
         errorEmitter.emit('permission-error', contextualError);
-        setUinExists(false); // Assume it doesn't exist to avoid blocking user
+        setReport(null);
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-    } else {
-      setUinExists(false);
-    }
-  }
+    findReport();
+  }, [firestore, reportId, form, user]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (uinExists) {
-      toast({
-        variant: 'destructive',
-        title: 'Duplicate UIN',
-        description: 'A report with this UIN already exists. Please enter a unique UIN.',
-      });
+    if (!firestore || !user || !report) {
+      toast({ variant: "destructive", title: "Error", description: "Could not update report." });
       return;
     }
-    if (!user) {
-      toast({ variant: "destructive", title: "Error", description: "You must be logged in to create a report." });
-      return;
-    }
+    
+    const reportRef = doc(firestore, 'users', report.enteredBy, 'testReports', report.id);
+    
+    const updateData = {
+        ...values,
+        challanDate: values.challanDate ? new Date(values.challanDate) : new Date()
+    };
+    
+    updateDoc(reportRef, updateData).then(() => {
+        toast({
+          title: 'Report Updated',
+          description: `Report with UIN ${values.uin} has been successfully updated.`,
+        });
+        router.push('/dashboard/reports');
+    }).catch((error) => {
+        const contextualError = new FirestorePermissionError({
+          operation: 'update',
+          path: reportRef.path,
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', contextualError);
+        toast({
+          variant: "destructive",
+          title: "Update Failed",
+          description: "You don't have permission to edit this report.",
+        });
+    });
+  }
 
-    try {
-      // First attempt: client SDK write (authenticated users)
-      if (firestore) {
-        try {
-          const reportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
-          const reportData = {
-            ...values,
-            entryDate: serverTimestamp(),
-            enteredBy: user.uid,
-          };
-          await setDoc(reportRef, reportData, { merge: true });
-          toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been successfully created.` });
-          form.reset();
-          setUinExists(false);
-          return;
-        } catch (err) {
-          console.warn('[new/report] client write failed, will fallback to server API', err);
-          // continue to fallback
-        }
-      }
+  if (isLoading) {
+      return <div>Loading report for editing...</div>
+  }
 
-      // Fallback: POST to server /api/create-report which will use admin or local fallback store
-      const resp = await fetch('/api/create-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userUid: user.uid, values }),
-      });
-      const text = await resp.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch (e) {
-        // non-json response
-        throw new Error(text || `Server responded with status ${resp.status}`);
-      }
-      if (!resp.ok) throw new Error(json?.error || JSON.stringify(json));
-
-      toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been created (server).` });
-      form.reset();
-      setUinExists(false);
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to create report.' });
-      console.error('[new/report] create-report error:', error);
-    }
+  if (!report) {
+      return notFound();
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add New Test Report</CardTitle>
-        <CardDescription>Fill in the details below to add a new report to the system.</CardDescription>
+        <CardTitle>Edit Test Report</CardTitle>
+        <CardDescription>Update the details for report with UIN: <span className="font-mono bg-muted p-1 rounded">{report.uin}</span></CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <div className="grid md:grid-cols-2 gap-8">
-              <FormField
+            <FormField
                 control={form.control}
                 name="uin"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Unique Identification Number (UIN)</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="e.g., REI-BNU-2025-0012"
-                        {...field}
-                        onChange={handleUinChange}
-                      />
+                      <Input {...field} disabled />
                     </FormControl>
-                    <FormDescription>Manually enter the UIN for this report.</FormDescription>
+                    <FormDescription>UIN cannot be changed after creation.</FormDescription>
                     <FormMessage />
-                    {uinExists && (
-                      <Alert variant="destructive">
-                        <Terminal className="h-4 w-4" />
-                        <AlertTitle>Duplicate UIN Warning</AlertTitle>
-                        <AlertDescription>A report with this UIN already exists.</AlertDescription>
-                      </Alert>
-                    )}
                   </FormItem>
                 )}
               />
+
+            <div className="grid md:grid-cols-2 gap-8">
               <FormField
                 control={form.control}
                 name="applicantName"
@@ -210,6 +198,19 @@ export default function NewReportPage() {
                     <FormLabel>Applicant Name</FormLabel>
                     <FormControl>
                       <Input placeholder="John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="electricalContractorName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Electrical Contractor Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Reliable Electrics" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -253,7 +254,7 @@ export default function NewReportPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a category" />
@@ -291,7 +292,7 @@ export default function NewReportPage() {
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                         className="flex items-center space-x-4"
                       >
                         <FormItem className="flex items-center space-x-2 space-y-0">
@@ -358,27 +359,14 @@ export default function NewReportPage() {
                   <FormItem>
                     <FormLabel>Challan Date</FormLabel>
                     <FormControl>
-                      <Input type="date" placeholder="2025-01-10" {...field} />
+                      <Input type="date" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-             <FormField
-                control={form.control}
-                name="electricalContractorName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Electrical Contractor Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Reliable Electrics" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
+            
             <FormField
               control={form.control}
               name="remarks"
@@ -398,10 +386,10 @@ export default function NewReportPage() {
             />
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => form.reset()}>
-                Clear
+              <Button type="button" variant="outline" onClick={() => router.back()}>
+                Cancel
               </Button>
-              <Button type="submit">Submit Report</Button>
+              <Button type="submit">Save Changes</Button>
             </div>
           </form>
         </Form>
