@@ -69,7 +69,7 @@ export default function UsersPage() {
         <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-semibold">User Management</h1>
         </div>
-        <DataTable columns={columns} data={users} />
+  <DataTable columns={columns} data={users} meta={{ currentUser: authUser }} />
     </div>
   );
 }
