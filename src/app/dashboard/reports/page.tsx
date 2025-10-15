@@ -34,6 +34,7 @@ export default function ViewReportsPage() {
       setMyReports(reports);
       setIsLoading(false);
     }, (error) => {
+      console.error("Firestore snapshot error:", error);
       const contextualError = new FirestorePermissionError({
         operation: 'list',
         path: `users/${user.uid}/testReports`,

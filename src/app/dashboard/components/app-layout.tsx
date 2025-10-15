@@ -18,7 +18,7 @@ import { Logo } from '@/components/logo';
 import { UserNav } from '@/components/user-nav';
 import type { NavItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { useUser } from '@/firebase';
+import { useUser, useFirebase } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -29,6 +29,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { usePathname } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
+import { UserProfile } from '@/lib/types';
 
 const navItems: NavItem[] = [
   { href: '/dashboard', title: 'Dashboard', icon: LayoutDashboard },
@@ -41,9 +43,23 @@ const navItems: NavItem[] = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || '';
   const { user } = useUser();
-  // `user` shape may be flexible; avoid strict typing assumptions here.
-  const userAny = user as any;
-  const isAdmin = (userAny?.role === 'Admin') || userAny?.email === 'm.ishaqbannu@gmail.com';
+  const { firestore } = useFirebase();
+  const [isAdmin, setIsAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user && firestore) {
+      const userRef = doc(firestore, 'users', user.uid);
+      getDoc(userRef).then(docSnap => {
+        if (docSnap.exists()) {
+          const userProfile = docSnap.data() as UserProfile;
+          setIsAdmin(userProfile.role === 'Admin');
+        } else {
+          setIsAdmin(false);
+        }
+      });
+    }
+  }, [user, firestore]);
+
 
   const handleLogout = () => {
     getAuth().signOut();

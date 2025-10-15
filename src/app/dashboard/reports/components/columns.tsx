@@ -79,7 +79,7 @@ const ReportActions = ({ report }: { report: TestReport }) => {
               View Details & Print
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem>Edit Report</DropdownMenuItem>
+          <DropdownMenuItem onClick={handleEdit}>Edit Report</DropdownMenuItem>
           <DropdownMenuSeparator />
           <AlertDialogTrigger asChild>
             <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
@@ -174,5 +174,3 @@ export const columns: ColumnDef<TestReport>[] = [
     },
   },
 ]
-
-    

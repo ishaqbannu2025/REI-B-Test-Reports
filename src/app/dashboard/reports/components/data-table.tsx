@@ -89,14 +89,6 @@ export function DataTable<TData, TValue>({
     },
   })
 
-  React.useEffect(() => {
-    if (date?.from || date?.to) {
-      table.getColumn("entryDate")?.setFilterValue(date)
-    } else {
-      table.getColumn("entryDate")?.setFilterValue(undefined)
-    }
-  }, [date, table])
-
 
   const handleExportPDF = () => {
     const doc = new jsPDF()
