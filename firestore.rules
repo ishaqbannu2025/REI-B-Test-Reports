@@ -31,11 +31,10 @@ service cloud.firestore {
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if false;
+      function isAdmin() {
+        return request.auth.token.role == 'Admin' || request.auth.token.email == 'm.ishaqbannu@gmail.com';
+      }
+      allow get, list, create, update, delete: if isOwner(userId) || isAdmin();
     }
 
     /**
@@ -51,14 +50,13 @@ service cloud.firestore {
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
+      function isAdmin() {
+        return request.auth.token.role == 'Admin' || request.auth.token.email == 'm.ishaqbannu@gmail.com';
+      }
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      allow get, list, create, update, delete: if isOwner(userId) || isAdmin();
     }
 
     /**
@@ -75,6 +73,9 @@ service cloud.firestore {
       function isOwner(ownerId) {
         return request.auth.uid == ownerId;
       }
+      function isAdmin() {
+        return request.auth.token.role == 'Admin' || request.auth.token.email == 'm.ishaqbannu@gmail.com';
+      }
       function isCreatingWithOwnerId() {
         return request.resource.data.enteredBy == request.auth.uid;
       }
@@ -83,9 +84,7 @@ service cloud.firestore {
       }
       allow get: if true;
       allow list: if true;
-      allow create: if isCreatingWithOwnerId();
-      allow update: if isExistingOwner(resource.data.enteredBy);
-      allow delete: if isExistingOwner(resource.data.enteredBy);
+      allow create, update, delete: if isCreatingWithOwnerId() || isAdmin();
     }
   }
 }
