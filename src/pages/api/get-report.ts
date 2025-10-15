@@ -3,12 +3,13 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collectionGroup, query, where, getDocs, limit, collection, getDoc, doc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { getAdminApp } from './admin-init';
-import admin from 'firebase-admin';
+import type admin from 'firebase-admin';
+import { findByUin } from './_fallback-store';
 
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const firestore = getFirestore(firebaseApp);
-const adminApp = getAdminApp();
-const adminDb: admin.firestore.Firestore | null = adminApp ? adminApp.firestore() : null;
+// Do not initialize admin at module load time. Initialize lazily inside the handler.
+let adminDb: admin.firestore.Firestore | null = null;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { method } = req;
@@ -20,7 +21,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const isDebug = String(debug || '') === '1';
 
   try {
-    // Prefer admin SDK when available for broader read access
+    // Prefer admin SDK when available for broader read access. Initialize lazily.
+    try {
+      if (!adminDb) {
+        const adminApp = getAdminApp();
+        const projectId = adminApp && (adminApp as any).options && (adminApp as any).options.projectId;
+        if (adminApp && projectId) {
+          adminDb = adminApp.firestore() as any;
+        } else {
+          console.warn('[get-report] adminApp present but missing projectId, skipping admin path');
+          adminDb = null;
+        }
+      }
+    } catch (err) {
+      console.warn('[get-report] Admin init failed (will use client/fallback)', err);
+      adminDb = null;
+    }
+
     if (adminDb) {
       console.info('[get-report] Using admin SDK to query collectionGroup for uin=', uin);
       const adminSnap = await adminDb.collectionGroup('testReports').where('uin', '==', uin).limit(1).get();
@@ -84,6 +101,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } catch (err) {
         // ignore and fall through to not found
         console.warn('[get-report] Fallback search failed', err);
+      }
+
+      // As a last resort, try the local fallback DB
+      try {
+        const found = findByUin(uin);
+        if (found) return res.status(200).json({ id: found.uid + '_' + uin, path: found.path, data: found.data });
+      } catch (err) {
+        console.warn('[get-report] local fallback lookup failed', err);
       }
 
       return res.status(404).json({ error: 'Report not found' });

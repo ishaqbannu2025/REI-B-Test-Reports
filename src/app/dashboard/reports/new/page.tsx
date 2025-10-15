@@ -36,6 +36,9 @@ import {
   query,
   where,
   getCountFromServer,
+  doc,
+  setDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 const formSchema = z.object({
@@ -120,27 +123,48 @@ export default function NewReportPage() {
     }
 
     try {
-      const response = await fetch('/api/create-report', {
+      // First attempt: client SDK write (authenticated users)
+      if (firestore) {
+        try {
+          const reportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
+          const reportData = {
+            ...values,
+            entryDate: serverTimestamp(),
+            enteredBy: user.uid,
+          };
+          await setDoc(reportRef, reportData, { merge: true });
+          toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been successfully created.` });
+          form.reset();
+          setUinExists(false);
+          return;
+        } catch (err) {
+          console.warn('[new/report] client write failed, will fallback to server API', err);
+          // continue to fallback
+        }
+      }
+
+      // Fallback: POST to server /api/create-report which will use admin or local fallback store
+      const resp = await fetch('/api/create-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values, userUid: user.uid }),
+        body: JSON.stringify({ userUid: user.uid, values }),
       });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create report');
+      const text = await resp.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        // non-json response
+        throw new Error(text || `Server responded with status ${resp.status}`);
       }
-      toast({
-        title: 'Report Submitted',
-        description: `Report with UIN ${values.uin} has been successfully created.`,
-      });
+      if (!resp.ok) throw new Error(json?.error || JSON.stringify(json));
+
+      toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been created (server).` });
       form.reset();
       setUinExists(false);
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to create report.',
-      });
+      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to create report.' });
+      console.error('[new/report] create-report error:', error);
     }
   }
 
