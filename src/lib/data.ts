@@ -3,13 +3,7 @@ import { TestReport, User } from './types';
 // This data is now used as a fallback or for type reference, 
 // as live data is fetched from Firebase.
 export const users: User[] = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'admin@example.gov',
-    role: 'Admin',
-    avatarUrl: 'https://i.pravatar.cc/150?u=admin@example.gov',
-  },
+  // Removed admin@example.gov user
   {
     id: '2',
     name: 'Data Entry User',

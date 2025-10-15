@@ -30,7 +30,7 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [email, setEmail] = useState('admin@example.gov');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('Innovation123');
 
   useEffect(() => {
@@ -57,8 +57,8 @@ export default function LoginPage() {
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
-        const adminEmails = ['admin@example.gov', 'm.ishaqbannu@gmail.com'];
-        const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
+  const adminEmails = ['m.ishaqbannu@gmail.com'];
+  const isInitialAdmin = adminEmails.includes(firebaseUser.email || '');
 
         const newUserProfile = {
           uid: firebaseUser.uid,
