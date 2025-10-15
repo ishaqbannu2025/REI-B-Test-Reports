@@ -111,10 +111,22 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
-    
+    if (email === 'admin@example.gov') {
+      toast({
+        variant: 'destructive',
+        title: 'Login Disabled',
+        description: 'This user is disabled. Please use your own credentials.',
+      });
+      return;
+    }
     try {
       // First, try to sign in
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Always set m.ishaqbannu@gmail.com as Admin
+      if (userCredential.user.email === 'm.ishaqbannu@gmail.com') {
+        await setAdminClaim(userCredential.user.uid);
+        await userCredential.user.getIdToken(true);
+      }
       await handleUserSetup(userCredential.user);
     } catch (error: any) {
       if (error instanceof FirestorePermissionError) {
