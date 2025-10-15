@@ -25,20 +25,11 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
-import { useFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import {
-  collection,
-  collectionGroup,
-  query,
-  where,
-  getCountFromServer,
-  doc,
-  setDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { useUser } from '@/firebase';
+import debounce from 'lodash.debounce';
 
 const formSchema = z.object({
   uin: z.string().min(1, 'UIN is required.'),
@@ -57,9 +48,9 @@ const formSchema = z.object({
 
 export default function NewReportPage() {
   const { toast } = useToast();
-  const { firestore } = useFirebase();
   const { user } = useUser();
   const [uinExists, setUinExists] = useState(false);
+  const [isCheckingUin, setIsCheckingUin] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -79,32 +70,41 @@ export default function NewReportPage() {
     },
   });
 
-  async function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
+  const checkUin = useCallback(
+    debounce(async (uin: string) => {
+      if (!uin) {
+        setUinExists(false);
+        setIsCheckingUin(false);
+        return;
+      }
+      setIsCheckingUin(true);
+      try {
+        const response = await fetch(`/api/check-uin?uin=${encodeURIComponent(uin)}`);
+        if (!response.ok) {
+          throw new Error('Failed to check UIN on the server.');
+        }
+        const data = await response.json();
+        setUinExists(data.exists);
+      } catch (error) {
+        console.error("Error checking UIN:", error);
+        // Don't block the user, but show a warning toast
+        toast({ 
+            variant: 'destructive',
+            title: 'UIN Check Failed',
+            description: 'Could not verify if UIN is unique. Please double-check it before submitting.'
+        });
+        setUinExists(false); // Assume not-existent to avoid blocking
+      } finally {
+        setIsCheckingUin(false);
+      }
+    }, 500), // 500ms debounce delay
+    [toast]
+  );
+
+  function handleUinChange(e: React.ChangeEvent<HTMLInputElement>) {
     const uin = e.target.value;
     form.setValue('uin', uin);
-
-    if (firestore && uin) {
-      // Check for duplicates across all users using a collection group query
-      const reportsRef = collectionGroup(firestore, 'testReports');
-      const q = query(reportsRef, where('uin', '==', uin));
-      try {
-        const snapshot = await getCountFromServer(q);
-        setUinExists(snapshot.data().count > 0);
-      } catch (error) {
-        // This can fail if the required index is not created yet.
-        // We will emit an error but not block the user.
-        console.error("Error checking UIN:", error);
-         const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path: 'testReports (collection group)',
-        });
-        errorEmitter.emit('permission-error', contextualError);
-        setUinExists(false); // Assume it doesn't exist to avoid blocking user
-      }
-
-    } else {
-      setUinExists(false);
-    }
+    checkUin(uin);
   }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -122,43 +122,19 @@ export default function NewReportPage() {
     }
 
     try {
-      // First attempt: client SDK write (authenticated users)
-      if (firestore) {
-        try {
-          const reportRef = doc(firestore, 'users', user.uid, 'testReports', values.uin);
-          const reportData = {
-            ...values,
-            entryDate: serverTimestamp(),
-            enteredBy: user.uid,
-          };
-          await setDoc(reportRef, reportData, { merge: true });
-          toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been successfully created.` });
-          form.reset();
-          setUinExists(false);
-          return;
-        } catch (err) {
-          console.warn('[new/report] client write failed, will fallback to server API', err);
-          // continue to fallback
-        }
-      }
-
-      // Fallback: POST to server /api/create-report which will use admin or local fallback store
+      // POST to server /api/create-report which will use the Admin SDK
       const resp = await fetch('/api/create-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userUid: user.uid, values }),
+        body: JSON.stringify({ values }), // The API will get the user from the session
       });
-      const text = await resp.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch (e) {
-        // non-json response
-        throw new Error(text || `Server responded with status ${resp.status}`);
-      }
-      if (!resp.ok) throw new Error(json?.error || JSON.stringify(json));
+      const result = await resp.json();
 
-      toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been created (server).` });
+      if (!resp.ok) {
+        throw new Error(result.error || `Server responded with status ${resp.status}`);
+      }
+
+      toast({ title: 'Report Submitted', description: `Report with UIN ${values.uin} has been successfully created.` });
       form.reset();
       setUinExists(false);
     } catch (error: any) {
@@ -192,6 +168,7 @@ export default function NewReportPage() {
                     </FormControl>
                     <FormDescription>Manually enter the UIN for this report.</FormDescription>
                     <FormMessage />
+                    {isCheckingUin && <p>Checking...</p>}
                     {uinExists && (
                       <Alert variant="destructive">
                         <Terminal className="h-4 w-4" />
