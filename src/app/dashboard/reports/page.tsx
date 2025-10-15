@@ -1,55 +1,60 @@
 'use client';
 import { DataTable } from './components/data-table';
 import { columns } from './components/columns';
-import { useFirebase, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import type { TestReport } from '@/lib/types';
 import { useEffect, useState } from 'react';
-import { FirestorePermissionError, errorEmitter } from '@/firebase';
+import { useUser } from '@/firebase';
 
 export default function ViewReportsPage() {
-  const { user, firestore } = useFirebase();
+  const { user } = useUser(); // Get the authenticated user
   const [myReports, setMyReports] = useState<TestReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const reportsQuery = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return query(collection(firestore, 'users', user.uid, 'testReports'), orderBy('entryDate', 'desc'));
-  }, [user, firestore]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!reportsQuery || !user) {
+    // Only fetch if the user is logged in.
+    if (!user) {
       setIsLoading(false);
       return;
     }
-    
-    setIsLoading(true);
-    
-    const unsubscribe = onSnapshot(reportsQuery, (querySnapshot) => {
-      const reports: TestReport[] = querySnapshot.docs.map(reportDoc => ({
-        id: reportDoc.id,
-        ...reportDoc.data()
-      } as TestReport));
-      
-      setMyReports(reports);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Firestore snapshot error:", error);
-      const contextualError = new FirestorePermissionError({
-        operation: 'list',
-        path: `users/${user.uid}/testReports`,
-      });
-      errorEmitter.emit('permission-error', contextualError);
-      setIsLoading(false);
-    });
 
-    return () => unsubscribe();
+    const fetchReports = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Make the API call to our backend endpoint
+        const response = await fetch('/api/get-report');
 
-  }, [reportsQuery, user]); 
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch reports from API');
+        }
 
+        const data = await response.json();
+        setMyReports(data.reports);
+
+      } catch (err) {
+        console.error("Error fetching reports:", err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchReports();
+
+  }, [user]); // The effect re-runs if the user logs in or out
 
   if (isLoading) {
     return <div>Loading reports...</div>;
+  }
+
+  if (error) {
+    return <div style={{ color: 'red' }}>Error: {error}</div>;
+  }
+  
+  if (!user) {
+    return <div>Please log in to view reports.</div>;
   }
 
   return (
