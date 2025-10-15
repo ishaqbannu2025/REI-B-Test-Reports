@@ -9,13 +9,20 @@ const firestore = getFirestore(firebaseApp);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    console.warn('[create-report] Method not allowed:', req.method);
+    return res.status(405).json({ error: 'Method not allowed', method: req.method });
   }
 
   try {
-    const { values, userUid } = req.body;
+    const { values, userUid } = req.body || {};
     if (!values || !userUid) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      console.warn('[create-report] Missing payload', { body: req.body });
+      return res.status(400).json({ error: 'Missing required fields', required: ['values', 'userUid'] });
+    }
+
+    if (!values.uin) {
+      console.warn('[create-report] Missing values.uin', { values });
+      return res.status(400).json({ error: 'Missing values.uin' });
     }
 
     const reportData = {
@@ -25,8 +32,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
     const userReportRef = doc(firestore, 'users', userUid, 'testReports', values.uin);
     await setDoc(userReportRef, reportData, { merge: true });
-    return res.status(200).json({ message: 'Report created', uin: values.uin });
+    console.info('[create-report] Report written', { path: userReportRef.path, uin: values.uin });
+    return res.status(200).json({ message: 'Report created', uin: values.uin, path: userReportRef.path });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('[create-report] Error', error);
+    // Expose minimal debug info but avoid leaking secrets
+    return res.status(500).json({ error: String(error?.message || error), debug: { name: error?.name } });
   }
 }
