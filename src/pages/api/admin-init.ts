@@ -4,6 +4,7 @@ import admin from 'firebase-admin';
 export function getAdminApp() {
   try {
     if (!admin.apps.length) {
+      console.log('Firebase Admin not initialized. Attempting initialization...');
       const serviceAccount = {
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
@@ -29,6 +30,9 @@ export function getAdminApp() {
         console.log('Attempting to initialize Firebase Admin with default credentials.');
         admin.initializeApp();
       }
+      console.log('Firebase Admin initialization attempt complete.');
+    } else {
+      console.log('Firebase Admin already initialized.');
     }
     return admin.app();
   } catch (err) {
